@@ -2,6 +2,8 @@ ARCH := x86_64
 KERNEL := build/kernel-$(ARCH).elf
 ISO := build/notOS-$(ARCH).iso
 COMPILED_OBJECT := target/$(ARCH)-notOS/debug/libnotOS.a
+QEMU_ARGS := -serial mon:stdio
+
 
 LINKER_SCRIPT := src/arch/$(ARCH)/linker.ld
 GRUB_CFG := src/arch/$(ARCH)/grub.cfg
@@ -17,7 +19,7 @@ clean:
 	@rm -rf build
 
 run: $(ISO)
-	@qemu-system-x86_64 -cdrom $(ISO)
+	@qemu-system-x86_64 -cdrom $(ISO) &
 
 iso: $(ISO)
 
@@ -33,6 +35,13 @@ $(KERNEL): build $(ASSEMBLY_OBJECT_FILES) $(LINKER_SCRIPT)
 
 build:
 	@RUST_TARGET_PATH=$(CURDIR) xargo build
+
+test: $(ISO)
+	@qemu-system-x86_64 $(QEMU_ARGS) -cdrom $(ISO) -device isa-debug-exit,iobase=0xf4,iosize=0x04 -display none -no-reboot || true &
+	@echo "Running tests. To stop the process call 'make stop'"
+
+stop:
+	@kill $$(pgrep -x qemu-system-x86)
 
 # Compile assembly files
 build/arch/$(ARCH)/%.o: src/arch/$(ARCH)/%.asm
