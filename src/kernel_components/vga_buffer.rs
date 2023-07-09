@@ -156,6 +156,14 @@ macro_rules! move_cursor {
 
 #[macro_export]
 macro_rules! print {
+    ($fr:expr; $($arg:tt)*) => {
+        $crate::kernel_components::vga_buffer::_coloring($fr, None);
+        print!($($arg)*);
+    };
+    ($fr:expr; $bg:expr; $($arg:tt)*) => {
+        $crate::kernel_components::vga_buffer::_coloring($fr, Some($bg));
+        print!($($arg)*);
+    };
     ($($arg:tt)*) => ($crate::kernel_components::vga_buffer::_print(format_args!($($arg)*)));
 }
 
