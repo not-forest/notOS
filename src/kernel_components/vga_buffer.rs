@@ -10,7 +10,7 @@ const BUFFER_WIDTH: usize = 80;
 lazy_static! {
     pub static ref LOGGER: Mutex<Logger> = Mutex::new(Logger {
         pos: 0,
-        color_code: ColorCode::new(Color::YELLOW, Color::BLACK),
+        color_code: ColorCode::new(Color::WHITE, Color::BLACK),
         buf: unsafe { &mut *(0xb8000 as *mut Buffer) } 
     });
     
@@ -22,6 +22,7 @@ pub struct Logger {
     buf: &'static mut Buffer,
 }
 
+#[allow(dead_code)]
 impl Logger {
     pub fn write(&mut self, byte: u8) {
         match byte {
@@ -52,6 +53,24 @@ impl Logger {
             }
         }
     }
+
+    pub fn move_cursor(&mut self, row: usize, col: usize) {
+        if row < BUFFER_HEIGHT && col < BUFFER_WIDTH {
+            self.pos = col;
+            self.new_line();
+
+            for i in 0..col {
+                self.buf.str[row][i] = Char {
+                    ascii_char: b' ',
+                    color_code: self.color_code,
+                };
+            }
+        }
+    }
+
+    pub fn change_color(&mut self, fr: Color, bg: Color) {
+        self.color_code = ColorCode::new(fr, bg);
+    }
     
     fn new_line(&mut self) {
         for row in 1..BUFFER_HEIGHT {
@@ -69,9 +88,7 @@ impl Logger {
             ascii_char: b' ',
             color_code: self.color_code,
         };
-        for col in 0..BUFFER_WIDTH {
-            self.buf.str[row][col] = blank;
-        }
+        self.buf.str[row].fill(blank);
     }
 
 }
@@ -79,6 +96,7 @@ impl Logger {
 impl fmt::Write for Logger {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         self.write_str(s);
+        self.color_code = ColorCode::new(Color::WHITE, Color::BLACK);
         Ok(())
     }
 }
@@ -128,7 +146,13 @@ struct Buffer {
     str: [[Char; BUFFER_WIDTH]; BUFFER_HEIGHT]
 }
 
-
+// MACROS
+#[macro_export]
+macro_rules! move_cursor {
+    ($row:expr, $col:expr) => {
+        LOGGER.lock().move_cursor($row, $col);
+    };
+}
 
 #[macro_export]
 macro_rules! print {
@@ -140,10 +164,35 @@ macro_rules! println {
     () => (print!("\n"));
     ($fmt:expr) => (print!(concat!($fmt, "\n")));
     ($fmt:expr, $($arg:tt)*) => (print!(concat!($fmt, "\n"), $($arg)*));
+    ($fr:expr; $fmt:expr) => {
+        $crate::kernel_components::vga_buffer::_coloring($fr, None);
+        println!($fmt);
+    };
+    ($fr:expr; $bg:expr; $fmt:expr) => {
+        $crate::kernel_components::vga_buffer::_coloring($fr, Some($bg));
+        println!($fmt);
+    };
+    ($fr:expr; $fmt:expr, $($arg:tt)*) => {
+        $crate::kernel_components::vga_buffer::_coloring($fr, None);
+        println!($fmt, $($arg)*);
+    };
+    ($fr:expr; $bg:expr; $fmt:expr, $($arg:tt)*) => {
+        $crate::kernel_components::vga_buffer::_coloring($fr, Some($bg));
+        println!($fmt, $($arg)*);
+    };
 }
 
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments) {
     use core::fmt::Write;
     LOGGER.lock().write_fmt(args).unwrap();
+}
+
+#[doc(hidden)]
+pub fn _coloring(fr: Color, bg: Option<Color>) {
+    if let Some(bg) = bg {
+        LOGGER.lock().change_color(fr, bg);
+    } else {
+        LOGGER.lock().change_color(fr, Color::BLACK);
+    }
 }
