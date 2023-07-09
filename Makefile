@@ -1,41 +1,40 @@
-arch ?= x86_64
-kernel := build/kernel-$(arch).elf
-iso := build/notOS-$(arch).iso
-compiled_object := target/$(arch)-notOS/debug/libnotOS.a
+ARCH := x86_64
+KERNEL := build/kernel-$(ARCH).elf
+ISO := build/notOS-$(ARCH).iso
+COMPILED_OBJECT := target/$(ARCH)-notOS/debug/libnotOS.a
 
-linker_script := src/arch/$(arch)/linker.ld
-grub_cfg := src/arch/$(arch)/grub.cfg
+LINKER_SCRIPT := src/arch/$(ARCH)/linker.ld
+GRUB_CFG := src/arch/$(ARCH)/grub.cfg
 
-assembly_source_files := $(wildcard src/arch/$(arch)/*.asm)
-assembly_object_files := $(patsubst src/arch/$(arch)/%.asm, \
-	build/arch/$(arch)/%.o, $(assembly_source_files))
+ASSEMBLY_SOURCE_FILES := $(wildcard src/arch/$(ARCH)/*.asm)
+ASSEMBLY_OBJECT_FILES := $(patsubst src/arch/$(ARCH)/%.asm, build/arch/$(ARCH)/%.o, $(ASSEMBLY_SOURCE_FILES))
 
 .PHONY: all clean run iso
 
-all: $(kernel)
+all: $(KERNEL)
 
 clean:
-	@rm -r build
+	@rm -rf build
 
-run: $(iso)
-	@qemu-system-x86_64 -cdrom $(iso)
+run: $(ISO)
+	@qemu-system-x86_64 -cdrom $(ISO)
 
-iso: $(iso)
+iso: $(ISO)
 
-$(iso): $(kernel) $(grub_cfg)
+$(ISO): $(KERNEL) $(GRUB_CFG)
 	@mkdir -p build/isofiles/boot/grub
-	@cp $(kernel) build/isofiles/boot/kernel.bin
-	@cp $(grub_cfg) build/isofiles/boot/grub
-	@grub-mkrescue --verbose -o $(iso) build/isofiles 2> /dev/null
-	@rm -r build/isofiles
+	@cp $(KERNEL) build/isofiles/boot/kernel.bin
+	@cp $(GRUB_CFG) build/isofiles/boot/grub
+	@grub-mkrescue --verbose -o $(ISO) build/isofiles 2> /dev/null
+	@rm -rf build/isofiles
 
-$(kernel): build $(assembly_object_files) $(linker_script)
-	@ld -n -T $(linker_script) -o $(kernel) $(assembly_object_files) $(compiled_object)
+$(KERNEL): build $(ASSEMBLY_OBJECT_FILES) $(LINKER_SCRIPT)
+	@ld -n -T $(LINKER_SCRIPT) -o $(KERNEL) $(ASSEMBLY_OBJECT_FILES) $(COMPILED_OBJECT)
 
 build:
-	@RUST_TARGET_PATH=$(shell pwd) xargo build
+	@RUST_TARGET_PATH=$(CURDIR) xargo build
 
-# compile assembly files
-build/arch/$(arch)/%.o: src/arch/$(arch)/%.asm
-	@mkdir -p $(shell dirname $@)
+# Compile assembly files
+build/arch/$(ARCH)/%.o: src/arch/$(ARCH)/%.asm
+	@mkdir -p $(dir $@)
 	@nasm -felf64 $< -o $@
