@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 #![feature(custom_test_frameworks)]
+#![test_runner(crate::test_runner)]
 
 mod kernel_components {
     pub mod vga_buffer;
@@ -12,12 +13,8 @@ use kernel_components::vga_buffer::Color;
 #[no_mangle]
 #[allow(unreachable_code)]
 pub extern "C" fn _start() -> ! {
-    println!("I can write a lot.");
-    println!("A lot of {}", "colorful");
-    println!(Color::MAGENTA; "Trully colorful");
-    println!(Color::GREEN; Color::DARKGRAY; "For sure");
-    println!(Color::BLACK; Color::WHITE; "Hello world! {}", "The world is in colors!");
-    panic!("Some error oh no!");
+    println!(Color::BLUE; "Will this work? {}", "HMMMM");
+    panic!("Some error");
 
     loop {}
 }
@@ -26,4 +23,12 @@ pub extern "C" fn _start() -> ! {
 fn panic(info: &PanicInfo) -> ! {
     println!(Color::RED; "{}", info);
     loop {}
+}
+
+#[cfg(test)]
+pub fn test_runner(tests: &[&dyn Fn()]) {
+    println!("Running {} tests:", tests.len());
+    for test in tests {
+        test();
+    }
 }
