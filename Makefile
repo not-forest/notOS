@@ -11,6 +11,7 @@ GDB_PORT := 1234
 ASSEMBLY_SOURCE_FILES := $(wildcard src/arch/$(ARCH)/*.asm)
 ASSEMBLY_OBJECT_FILES := $(patsubst src/arch/$(ARCH)/%.asm, build/arch/$(ARCH)/%.o, $(ASSEMBLY_SOURCE_FILES))
 
+
 .PHONY: all clean run test iso
 
 all: $(KERNEL)
