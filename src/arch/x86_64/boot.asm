@@ -1,7 +1,7 @@
 global initiate
 extern long_mode_start
 
-section .text
+section .loader
 bits 32
 initiate:
     mov esp, stack_top

@@ -1,6 +1,6 @@
 global long_mode_start
 
-section .text
+section .loader
 bits 64
 long_mode_start:
     ; load 0 into all data segment registers
@@ -13,5 +13,3 @@ long_mode_start:
 
     extern _start
     call _start
-
-    hlt
