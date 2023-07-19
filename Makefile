@@ -38,7 +38,7 @@ $(KERNEL): $(ASSEMBLY_OBJECT_FILES)
 	@ar crus build/libbootloader.a $(ASSEMBLY_OBJECT_FILES)
 
 build_kernel:
-	@RUST_TARGET_PATH=$(CURDIR) xargo build --verbose
+	@RUST_TARGET_PATH=$(CURDIR) xargo build
 
 stop:
 	@kill $$(pgrep -x qemu-system-x86)
@@ -59,7 +59,7 @@ $(TEST_ISO): $(KERNEL) test_build $(GRUB_CFG)
 	@rm -rf build/tests/isofiles
 
 test_build:
-	@RUST_TARGET_PATH=$(CURDIR) cargo test --verbose --no-run --message-format=json > latest_test.json
+	@RUST_TARGET_PATH=$(CURDIR) cargo test --no-run --message-format=json > latest_test.json
 	@python3 extract.py
 
 
