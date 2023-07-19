@@ -7,6 +7,9 @@ edition = "2021"
 version = "1.0"
 features = ["spin_no_std"]
 
+[[test]]
+name = "int_tests"
+
 [dependencies]
 spin = "0.5.2"
 volatile = "0.2.6"
