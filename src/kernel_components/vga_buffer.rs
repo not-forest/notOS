@@ -1,7 +1,7 @@
 // Printing strings and characters
 
 use core::fmt;
-use spin::Mutex;
+use crate::kernel_components::sync::mutex::Mutex;
 use lazy_static::lazy_static;
 
 const BUFFER_HEIGHT: usize = 25;
@@ -13,7 +13,6 @@ lazy_static! {
         color_code: ColorCode::new(Color::WHITE, Color::BLACK),
         buf: unsafe { &mut *(0xb8000 as *mut Buffer) } 
     });
-    
 }
 
 pub struct Logger {
