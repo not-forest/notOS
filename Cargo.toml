@@ -9,7 +9,3 @@ features = ["spin_no_std"]
 
 [[test]]
 name = "int_tests"
-
-[dependencies]
-spin = "0.5.2"
-volatile = "0.2.6"
