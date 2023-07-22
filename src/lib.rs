@@ -1,11 +1,25 @@
 #![no_std]
 #![cfg_attr(test, no_main)]
-#![feature(custom_test_frameworks, used_with_arg)]
+#![feature(custom_test_frameworks, used_with_arg, error_in_core)]
 #![test_runner(crate::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
 pub mod kernel_components {
     pub mod vga_buffer;
+    pub mod kernel_statics;
+    pub mod error;
+
+    pub mod instructions {
+        pub mod interrupt;
+    }
+
+    pub mod sync {
+        pub mod mutex;
+    }
+
+    pub mod memory {
+        pub mod memory_module;
+    }
 }
 
 use core::panic::PanicInfo;
