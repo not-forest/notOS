@@ -21,7 +21,7 @@ static HEADER_END_FUNC: unsafe extern "C" fn() = header_end;
 use notOS::{println, print, kernel_components::vga_buffer::Color};
 
 #[no_mangle]
-pub extern "C" fn _start() {
+pub extern "C" fn _start(_multiboot_information_address: usize) {
     #[cfg(test)]
     test_main();
 
