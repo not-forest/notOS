@@ -6,7 +6,6 @@
 
 pub mod kernel_components {
     pub mod vga_buffer;
-    pub mod kernel_statics;
     pub mod error;
 
     pub mod instructions {
@@ -15,11 +14,16 @@ pub mod kernel_components {
 
     pub mod sync {
         pub mod mutex;
+        pub mod single;
+
+        pub use mutex::{Mutex, MutexGuard};
+        pub use single::{Once, Single};
     }
 
     pub mod memory {
         pub mod memory_module;
     }
+
 }
 
 use core::panic::PanicInfo;
