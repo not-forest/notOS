@@ -1,18 +1,17 @@
 // Printing strings and characters
 
 use core::fmt;
-use crate::kernel_components::sync::mutex::Mutex;
-use lazy_static::lazy_static;
+use crate::{kernel_components::sync::Mutex, single};
 
 const BUFFER_HEIGHT: usize = 25;
 const BUFFER_WIDTH: usize = 80;
 
-lazy_static! {
-    pub static ref LOGGER: Mutex<Logger> = Mutex::new(Logger {
+single! {
+    LOGGER: Mutex<Logger> = Mutex::new(Logger {
         pos: 0,
         color_code: ColorCode::new(Color::WHITE, Color::BLACK),
         buf: unsafe { &mut *(0xb8000 as *mut Buffer) } 
-    });
+    })
 }
 
 pub struct Logger {
