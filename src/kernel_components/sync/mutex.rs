@@ -15,7 +15,7 @@ pub struct MutexGuard<'a, T: 'a + ?Sized>(&'a Mutex<T>);
 
 impl<T> Mutex<T> {
     #[inline(always)]
-    pub fn new(data: T) -> Self {
+    pub const fn new(data: T) -> Self {
         Self { 
             status: AtomicBool::new(false), 
             poisoned: AtomicBool::new(false),
