@@ -18,10 +18,19 @@ static HEADER_START_FUNC: unsafe extern "C" fn() = header_start;
 #[used(linker)]
 static HEADER_END_FUNC: unsafe extern "C" fn() = header_end;
 
-use notOS::{println, print, kernel_components::vga_buffer::Color};
+use notOS::{println, print, 
+    kernel_components::{
+        memory::{InfoPointer, BootInfoHeader}
+    },
+    Color,
+};
 
 #[no_mangle]
 pub extern "C" fn _start(_multiboot_information_address: usize) {
+    #[cfg(debug_assertions)] {
+        let boot_info = unsafe { InfoPointer::load(_multiboot_information_address as *const BootInfoHeader ) };
+    }
+
     #[cfg(test)]
     test_main();
 
@@ -30,7 +39,7 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
 
 #[allow(dead_code, unreachable_code)]
 fn main() -> ! {
-    println!(Color::BLUE; "Hello there");
-    panic!("I would panic!");
+    println!(Color::BLUE; "Hello memory!");
+    
     loop {}
 }
