@@ -1,11 +1,19 @@
-// Printing strings and characters
+/// Printing strings and characters inside OS. This is the most basic way to get some output
+/// from running OS or tests.
+///
+/// This module provides a simple Logger structure and macros for printing formatted output
+/// to a VGA buffer, simulating output on the screen in a basic operating system environment.
 
 use core::fmt;
-use crate::{kernel_components::sync::Mutex, single};
+use crate::{
+    kernel_components::sync::Mutex,
+    single,
+};
 
 const BUFFER_HEIGHT: usize = 25;
 const BUFFER_WIDTH: usize = 80;
 
+/// Creates a lazy initialization of a static Logger instance.
 single! {
     LOGGER: Mutex<Logger> = Mutex::new(Logger {
         pos: 0,
@@ -14,6 +22,7 @@ single! {
     })
 }
 
+/// Represents the Logger structure responsible for writing to the VGA buffer.
 pub struct Logger {
     pos: usize,
     color_code: ColorCode,
@@ -22,7 +31,8 @@ pub struct Logger {
 
 #[allow(dead_code)]
 impl Logger {
-    pub fn write(&mut self, byte: u8) {
+    /// Writes a single byte to the VGA buffer, handling newline characters.
+    pub(self) fn write(&mut self, byte: u8) {
         match byte {
             b'\n' => self.new_line(),
             _ => {
@@ -43,7 +53,8 @@ impl Logger {
         }
     }
 
-    pub fn write_str(&mut self, s: &str) {
+    /// Writes a string to the VGA buffer using the `write` method.
+    pub(self) fn write_str(&mut self, s: &str) {
         for byte in s.bytes() {
             match byte {
                 0x20..=0x7e | b'\n' => self.write(byte),
@@ -52,7 +63,8 @@ impl Logger {
         }
     }
 
-    pub fn move_cursor(&mut self, row: usize, col: usize) {
+    /// Moves the cursor to a specific position on the VGA buffer
+    pub(self) fn move_cursor(&mut self, row: usize, col: usize) {
         if row < BUFFER_HEIGHT && col < BUFFER_WIDTH {
             self.pos = col;
             self.new_line();
@@ -66,7 +78,8 @@ impl Logger {
         }
     }
 
-    pub fn change_color(&mut self, fr: Color, bg: Color) {
+    /// Changes the color of the text in the VGA buffer.
+    pub(self) fn change_color(&mut self, fr: Color, bg: Color) {
         self.color_code = ColorCode::new(fr, bg);
     }
     
@@ -91,6 +104,7 @@ impl Logger {
 
 }
 
+// Implement the fmt::Write trait for the Logger, allowing it to be used with formatted printing macros.
 impl fmt::Write for Logger {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         self.write_str(s);
@@ -99,6 +113,7 @@ impl fmt::Write for Logger {
     }
 }
 
+/// All colors that are allowed to use when printing.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -121,17 +136,21 @@ pub enum Color {
     WHITE = 15,
 }
 
+/// The color code structure is a number that contain a pair of background and 
+/// foreground that decide which colors will be used on printing. 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
 struct ColorCode(u8);
 
 impl ColorCode {
+    /// Creates a new ColorCode, in which fr is a foreground color and bg is a background.
+    /// Arguments must be values from Color enum in order to properly generate a real color pair
     fn new(fr: Color, bg: Color) -> ColorCode {
         ColorCode((bg as u8) << 4 | (fr as u8))
     }
 }
 
-
+/// A character representation in a VGA buffer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(C)]
 struct Char {
@@ -139,12 +158,15 @@ struct Char {
     color_code: ColorCode,
 }
 
+/// A buffer that represents a whole string for printing.
 #[repr(transparent)]
 struct Buffer {
     str: [[Char; BUFFER_WIDTH]; BUFFER_HEIGHT]
 }
 
-// MACROS
+/// # Macros
+
+/// Moves the cursor's location to given row and column. 
 #[macro_export]
 macro_rules! move_cursor {
     ($row:expr, $col:expr) => {
@@ -152,6 +174,27 @@ macro_rules! move_cursor {
     };
 }
 
+/// Prints the content to the screen via VGA buffer. It does support coloring
+/// for background and foreground. Works the same way how print! from standard
+/// library would work, except for coloring.
+/// 
+/// If needed the coloring can be changed with Color enum. The colors are separated
+/// with ; while other args are separated with a comma. The first color is always considered
+/// as a foreground while the second is considered as background. By default it uses white foreground
+/// and black background
+/// 
+/// # Examples
+/// ''' 
+/// use notOS::{print, Color};
+/// 
+/// fn main() -> ! {
+///     print!(Color::BLUE; "This text's foreground will be blue. {}", "Yes it is indeed.\n");
+///     print!(Color::RED; Color::GREEN; "I am red and angry, but green inside.\n");
+///     print!("I am the most default dude out there.");
+///
+///     loop {}
+/// }
+/// '''
 #[macro_export]
 macro_rules! print {
     ($fr:expr; $($arg:tt)*) => {
@@ -165,6 +208,26 @@ macro_rules! print {
     ($($arg:tt)*) => ($crate::kernel_components::vga_buffer::_print(format_args!($($arg)*)));
 }
 
+/// Prints the content to the screen via VGA buffer and moves the cursor to new line. It does support coloring
+/// for background and foreground. Works the same way how print! from standard library would work, except for coloring.
+/// 
+/// If needed the coloring can be changed with Color enum. The colors are separated
+/// with ; while other args are separated with a comma. The first color is always considered
+/// as a foreground while the second is considered as background. By default it uses white foreground
+/// and black background
+/// 
+/// # Examples
+/// ''' 
+/// use notOS::{println, Color};
+/// 
+/// fn main() -> ! {
+///     println!(Color::BLUE; "This text's foreground will be blue. {}", "Yes it is indeed.");
+///     println!(Color::RED; Color::GREEN; "I am red and angry, but green inside.");
+///     println!("I am the most default dude out there... maybe.");
+///
+///     loop {}
+/// }
+/// '''
 #[macro_export]
 macro_rules! println {
     () => (print!("\n"));
