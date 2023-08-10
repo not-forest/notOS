@@ -5,6 +5,7 @@
 use core::ptr::{Pointee, addr_of};
 use core::fmt::{Debug, Formatter};
 use core::hash::Hash;
+use core::marker::PhantomData;
 use core::str::Utf8Error;
 use crate::kernel_components::structures::IternumTrait;
 use proc_macros::Iternum;
@@ -167,5 +168,43 @@ impl From<TagType> for TagTypeId {
     fn from(value: TagType) -> Self {
         let temp_u32 = u32::from(value);
         TagTypeId::from(temp_u32)
+    }
+}
+
+// A FtL tag iterator.
+#[derive(Clone, Debug)]
+pub struct TagIter<'a> {
+    pub current: *const Tag,
+    end_ptr_exclusive: *const u8,
+    _mem: PhantomData<&'a ()>,
+}
+
+impl<'a> TagIter<'a> {
+    /// Creates a new iterator
+    pub fn new(mem: &'a [u8]) -> Self {
+        assert_eq!(mem.as_ptr().align_offset(8), 0);
+        TagIter {
+            current: mem.as_ptr().cast(),
+            end_ptr_exclusive: unsafe { mem.as_ptr().add(mem.len()) },
+            _mem: PhantomData,
+        }
+    }
+}
+
+impl<'a> Iterator for TagIter<'a> {
+    type Item = &'a Tag;
+
+    fn next(&mut self) -> Option<&'a Tag> {
+        assert!(self.current.cast::<u8>() < self.end_ptr_exclusive);
+
+        let tag = unsafe { &*self.current };
+        match tag.get_type() {
+            TagType::End => None,
+            _ => {
+                let ptr_offset = (tag.size as usize + 7) & !7;
+                self.current = unsafe { self.current.cast::<u8>().add(ptr_offset).cast::<Tag>() };
+                Some(tag)
+            }
+        }
     }
 }
