@@ -19,6 +19,14 @@ SECTIONS {
         *(text*)
     } > kernel_memory
 
+    .rodata : {
+        *(.rodata .rodata.*)
+    }
+
+    .data.rel.ro : {
+        *(.data.rel.ro.local*) *(.data.rel.ro .data.rel.ro.*)
+    }
+
     /DISCARD/ : {
         *(.comment)
         *(.eh_frame)

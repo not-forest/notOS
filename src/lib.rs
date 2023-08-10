@@ -4,7 +4,7 @@
 
 #![no_std]
 #![cfg_attr(test, no_main)]
-#![allow(incomplete_features)]
+#![allow(incomplete_features, unused, non_snake_case)]
 #![feature(custom_test_frameworks, used_with_arg, error_in_core, ptr_metadata, generic_const_exprs)]
 #![test_runner(crate::test_runner)]
 #![reexport_test_harness_main = "test_main"]
@@ -21,7 +21,10 @@ pub mod kernel_components {
     }
 
     pub mod instructions {
+        pub mod random;
         pub mod interrupt;
+
+        pub use random::{Random, RdRand, RdSeed};
     }
 
     pub mod sync {
@@ -37,6 +40,10 @@ pub mod kernel_components {
         pub mod tags;
 
         pub use memory_module::{InfoPointer, BootInfoHeader};
+    }
+
+    pub mod virtualization {
+        pub mod process;
     }
 
 }
