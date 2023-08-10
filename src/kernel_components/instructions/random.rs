@@ -2,7 +2,8 @@
 
 use core::arch::x86_64 as arch;
 
-// Container enum that decides which random source will be used on acquired hardware.
+/// Container enum that decides which random source will be used on acquired hardware.
+/// The None option will disappear after the implementation of PseudoRd
 #[derive(Clone, Copy, Debug)]
 pub enum RandomSource {
     RdRand(RdRand), // The real random numbers from hardware that supports rdrand.
@@ -23,24 +24,28 @@ impl RandomSource {
     }
 }
 
-// A true random numbers provided via hardware that supports RDRAND.
+/// A true random numbers provided via hardware that supports RDRAND.
 #[derive(Clone, Copy, Debug)]
 pub struct RdRand(());
 
-// A true random seed numbers provided via hardware that supports RDSEED.
+/// A true random seed numbers provided via hardware that supports RDSEED.
 #[derive(Clone, Copy, Debug)]
 pub struct RdSeed(());
 
-// The Random is a wrapper over random sources that uses the corresponding random source to generate random responses.
+/// The Random is a wrapper over random sources that uses the corresponding random source to generate random responses.
 #[derive(Clone, Copy, Debug)]
 pub struct Random(RandomSource);
 
 impl Random {
+    /// Creates a new instance of some random source. This process is automatic and will pick the best choice
+    /// of source, based on hardware. This struct must be used for weaker implementations. For some specific cases is better
+    /// to use RdRand and RdSeed.
     #[inline(always)]
     pub fn new() -> Self {
         Self(RandomSource::new())
     }
 
+    /// Returns a tandom float between 0 and 1.
     #[inline]
     pub fn rand(&self) -> Option<f64> {
         match self.0 {
@@ -58,7 +63,7 @@ impl Random {
 }
 
 impl RdRand {
-    // If rdrand is supported creates one.
+    /// Creates the instance of RdRand if it is supported on hardware.
     #[inline(always)]
     pub fn new() -> Option<Self> {
         let cpuid = unsafe { arch::__cpuid(0x1) };
@@ -69,7 +74,7 @@ impl RdRand {
         }
     }
 
-    // Uniformly sampled u64.
+    /// Uniformly sampled u64. Returns a random u64 in the range 0..u64::MAX
     #[inline]
     pub fn get_u64(self) -> Option<u64> {
         let mut res: u64 = 0;
@@ -84,7 +89,7 @@ impl RdRand {
         }
     }
 
-    // Uniformly sampled u32.
+    /// Uniformly sampled u32. Returns a random u64 in the range 0..u32::MAX
     #[inline]
     pub fn get_u32(self) -> Option<u32> {
         let mut res: u32 = 0;
@@ -99,7 +104,7 @@ impl RdRand {
         }
     }
 
-    // Uniformly sampled u16.
+    /// Uniformly sampled u16. Returns a random u64 in the range 0..u16::MAX
     #[inline]
     pub fn get_u16(self) -> Option<u16> {
         let mut res: u16 = 0;
@@ -116,7 +121,7 @@ impl RdRand {
 }
 
 impl RdSeed {
-    // If rdseed is supported creates one.
+    /// Creates the instance of RdSeed if it is supported on hardware.
     #[inline(always)]
     pub fn new() -> Option<Self> {
         let cpuid = unsafe { arch::__cpuid(0x1) };
@@ -127,7 +132,7 @@ impl RdSeed {
         }
     }
 
-    // Generate a random seed in the u64 set.
+    /// Generate a random seed in the u64 set.
     #[inline]
     pub fn get_u64_seed(self) -> Option<u64> {
         let mut seed: u64 = 0;
@@ -142,7 +147,7 @@ impl RdSeed {
         }
     }
 
-    // Generate a random seed in the u32 set.
+    /// Generate a random seed in the u32 set.
     #[inline]
     pub fn get_u32_seed(self) -> Option<u32> {
         let mut seed: u32 = 0;
@@ -157,7 +162,7 @@ impl RdSeed {
         }
     }
 
-    // Generate a random seed in the u16 set.
+    /// Generate a random seed in the u16 set.
     #[inline]
     pub fn get_u16_seed(self) -> Option<u16> {
         let mut seed: u16 = 0;
