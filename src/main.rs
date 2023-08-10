@@ -18,10 +18,10 @@ static HEADER_START_FUNC: unsafe extern "C" fn() = header_start;
 #[used(linker)]
 static HEADER_END_FUNC: unsafe extern "C" fn() = header_end;
 
+/// This is the main binary (kernel) space. As the library will build in, more new features will be added further.
 use notOS::{println, print, 
-    kernel_components::{
-        memory::{InfoPointer, BootInfoHeader}
-    },
+    kernel_components::
+        memory::{InfoPointer, BootInfoHeader},              
     Color,
 };
 
