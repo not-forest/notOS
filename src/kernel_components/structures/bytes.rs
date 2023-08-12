@@ -1,6 +1,6 @@
 /// A byte representation
 
-use core::{ptr, mem, ops::{Deref, DerefMut}};
+use core::{ptr, mem, ops::Deref};
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Ord, Eq)]
 #[repr(transparent)]
@@ -8,7 +8,7 @@ pub struct Bytes<'a>(&'a [u8]);
 
 impl<'a> Bytes<'a> {
     #[inline(always)]
-    pub const fn new(bytes: &[u8]) -> Self {
+    pub fn new(bytes: &'a [u8]) -> Self {
         Self( bytes )
     }
 }
@@ -18,12 +18,6 @@ impl<'a> Deref for Bytes<'a> {
 
     fn deref(&self) -> &Self::Target {
         self.0.as_ref()
-    }
-}
-
-impl<'a> DerefMut for Bytes<'a> {
-    fn deref_mut(&mut self) -> &mut [u8] {
-        self.0.as_mut()
     }
 }
 
