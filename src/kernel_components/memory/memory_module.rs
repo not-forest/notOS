@@ -3,7 +3,7 @@
 use core::mem::size_of;
 use crate::MbiLoadError;
 
-use super::tags::EndTag;
+use super::{tags::{EndTag, TagTrait, TagIter}, memory_map::MemoryMapTag};
 
 // This magic number has 
 pub const MAGIC: u32 = 0x36d76289;
@@ -74,24 +74,20 @@ impl<'a> InfoPointer<'a> {
 
         Ok(Self(mbi))     
     }
-}
 
-
-/* const PAGE_SIZE: usize = 4096;
-
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Frame {
-    num: usize,
-}
-
-pub trait FrameAlloc {
-    fn alloc(&mut self) -> Option<Frame>;
-    fn dealloc(&mut self, frame: Frame);
-}
-
-impl Frame {
-    fn info_address(address: usize) -> Frame {
-        Frame { num: address / PAGE_SIZE }
+    pub fn memory_map_tag(&self) -> Option<&MemoryMapTag> {
+        self.get_tag::<MemoryMapTag>()
+    }
+    
+    pub fn get_tag<TagT: TagTrait + ?Sized + 'a>(&'a self) -> Option<&'a TagT>  {
+        self.tags()
+        .find(|tag| tag.tag_type == TagT::ID.into())
+        .map(|tag| tag.cast_tag::<TagT>())
+    }
+    
+    fn tags(&self) -> TagIter {
+        TagIter::new(&self.0.tags)
     }
 }
-*/
+
+
