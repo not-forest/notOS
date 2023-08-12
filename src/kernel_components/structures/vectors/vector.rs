@@ -6,6 +6,7 @@ use core::marker::PhantomData;
 use core::alloc::{Layout, GlobalAlloc};
 use core::ops::{Deref, DerefMut};
 
+use crate::AsBytes;
 use crate::kernel_components::memory::global_alloc::{GAllocator, GLOBAL_ALLOCATOR};
 use super::raw_vector::RawVec;
 
@@ -22,7 +23,7 @@ pub struct Vec<T> {
 impl<T> Vec<T> {
     /// Creates a new instance of empty vector.
     #[inline(always)]
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             buf: RawVec::new(),
             len: 0,
@@ -31,12 +32,12 @@ impl<T> Vec<T> {
     }
 
     #[inline]
-    pub fn from_array(array: &[T]) -> Self {
-        let temp_vec = Self::new();
+    pub fn from_array(array: &[T]) -> Self where T: Copy {
+        let mut temp_vec = Self::new();
 
         array
             .into_iter()
-            .for_each(move |item| temp_vec.push(*item));
+            .for_each(|item| temp_vec.push(*item));
 
         temp_vec
     }
@@ -214,3 +215,5 @@ mod tests {
         }    
     }
 }
+
+impl<T> AsBytes for Vec<T> {}
