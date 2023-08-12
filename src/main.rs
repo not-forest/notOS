@@ -28,7 +28,14 @@ use notOS::{println, print,
 #[no_mangle]
 pub extern "C" fn _start(_multiboot_information_address: usize) {
     #[cfg(debug_assertions)] {
-        let boot_info = unsafe { InfoPointer::load(_multiboot_information_address as *const BootInfoHeader ) };
+        let boot_info = unsafe { InfoPointer::load(_multiboot_information_address as *const BootInfoHeader ) }.unwrap();
+        let memory_map_tag = boot_info.memory_map_tag()
+            .expect("Memory map tag required.");
+
+        println!("Memory Areas:");
+        for area in memory_map_tag.memory_areas() {
+            println!(Color::LIGHTGREEN; "      start: 0x{:x}, length: 0x{:x}", area.base_addr, area.length);
+        }
     }
 
     #[cfg(test)]
