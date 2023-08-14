@@ -9,8 +9,8 @@ use crate::kernel_components::memory::global_alloc::{GLOBAL_ALLOCATOR, GAllocato
 
 /// This node should be used in vectors and vector-like types.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct RawVec<T> {
-    /// The NotNull struct do not enable any zero-sized data what so ever.
+pub struct RawVec<T: Sized> {
+    /// Pointer to data on the heap.
     pub(crate) ptr: NonNull<T>,
     /// The overall capacity of the vector which is it's size.
     pub(crate) cap: usize,
@@ -68,7 +68,7 @@ impl<T> RawVec<T> {
 unsafe impl<T: Send> Send for RawVec<T> {}
 unsafe impl<T: Sync> Sync for RawVec<T> {}
 
-impl<T> Drop for RawVec<T> {
+impl<T: Sized> Drop for RawVec<T> {
     fn drop(&mut self) {
         let elem_size = mem::size_of::<T>();
 
