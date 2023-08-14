@@ -12,7 +12,7 @@ use super::raw_vector::RawVec;
 
 /// A naive vector implementation that does not allow ZST's.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Vec<T> {
+pub struct Vec<T: Sized> {
     pub buf: RawVec<T>,
     /// The amount of elements stored in the vector.
     pub len: usize,
@@ -39,6 +39,13 @@ impl<T> Vec<T> {
             .into_iter()
             .for_each(|item| temp_vec.push(*item));
 
+        temp_vec
+    }
+
+    #[inline]
+    pub fn from(item: T) -> Self {
+        let mut temp_vec = Self::new();
+        temp_vec.push(item);
         temp_vec
     }
 
@@ -129,7 +136,7 @@ unsafe impl<T: Send> Send for Vec<T> {}
 unsafe impl<T: Sync> Sync for Vec<T> {}
 
 /// Drop for vector to not leak data.
-impl<T> Drop for Vec<T> {
+impl<T: Sized> Drop for Vec<T> {
     fn drop(&mut self) {
         if self.cap() != 0 {
             while let Some(_) = self.pop() { /* Deleting all the elements */ }
@@ -213,6 +220,12 @@ mod tests {
             let data = ptr::read(ptr);
             assert_eq!(1, data);
         }    
+    }
+}
+
+impl<T, A> FromIterator<A> for Vec<T> {
+    fn from_iter<R: IntoIterator<Item = A>>(iter: R) -> Self {
+        Self::from_iter(iter)
     }
 }
 
