@@ -90,6 +90,9 @@ pub mod kernel_components {
 
     pub mod virtualization {
         pub mod process;
+        pub mod thread;
+
+        pub use process::{Process, ProcState};
     }
 
 }
