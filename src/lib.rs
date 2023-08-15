@@ -83,6 +83,8 @@ pub mod kernel_components {
         pub mod global_alloc;
         pub mod memory_module;
         pub mod memory_map;
+        pub mod sections;
+        pub mod frames;
         pub mod tags;
 
         pub use memory_module::{InfoPointer, BootInfoHeader};
