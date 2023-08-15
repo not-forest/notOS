@@ -1,8 +1,8 @@
+/// A memory map tag and it's corresponding structures and methods.
 use core::fmt::{Debug, Formatter};
 use core::marker::PhantomData;
 use core::mem;
 use core::ops::Deref;
-/// A memory map tag and it's corresponding structures and methods.
 
 use proc_macros::Iternum;
 use crate::{Vec, AsBytes};
@@ -48,7 +48,7 @@ impl MemoryMapTag {
             bytes.push(area.as_bytes());
         }
 
-        BoxedDst::new(bytes.as_bytes().deref())
+        BoxedDst::new(bytes.as_bytes().into())
     }
 
     /// Returns the entry size.
