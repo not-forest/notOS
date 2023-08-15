@@ -31,10 +31,19 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
         let boot_info = unsafe { InfoPointer::load(_multiboot_information_address as *const BootInfoHeader ) }.unwrap();
         let memory_map_tag = boot_info.memory_map_tag()
             .expect("Memory map tag required.");
+        let elf_sections_tag = boot_info.elf_sections_tag()
+            .expect("Elf-sections tag required.");
 
+        
         println!("Memory Areas:");
         for area in memory_map_tag.memory_areas() {
-            println!(Color::LIGHTGREEN; "      start: 0x{:x}, length: 0x{:x}", area.base_addr, area.length);
+            println!(Color::GREEN; "      start: 0x{:x}, length: 0x{:x}", area.base_addr, area.length);
+        }
+
+        println!("Kernel Sections:");
+        for section in elf_sections_tag {
+            let section_inner = section.get();
+            println!(Color::LIGHTGREEN; "      addr: 0x{:x}, size: 0x{:x}, flags: 0x{:x}", section_inner.addr(), section_inner.size(), section_inner.flags());
         }
     }
 
