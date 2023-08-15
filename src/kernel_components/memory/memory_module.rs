@@ -3,7 +3,11 @@
 use core::mem::size_of;
 use crate::MbiLoadError;
 
-use super::{tags::{EndTag, TagTrait, TagIter}, memory_map::MemoryMapTag};
+use super::{
+    tags::{EndTag, TagTrait, TagIter}, 
+    memory_map::MemoryMapTag,
+    sections::{SectionsTag, SectionIter},
+};
 
 // This magic number has 
 pub const MAGIC: u32 = 0x36d76289;
@@ -75,14 +79,23 @@ impl<'a> InfoPointer<'a> {
         Ok(Self(mbi))     
     }
 
+    /// Returns memory map tag. This tag points to memory areas inside the kernel.
     pub fn memory_map_tag(&self) -> Option<&MemoryMapTag> {
         self.get_tag::<MemoryMapTag>()
     }
     
-    pub fn get_tag<TagT: TagTrait + ?Sized + 'a>(&'a self) -> Option<&'a TagT>  {
+    pub fn elf_sections_tag(&self) -> Option<SectionIter> {
+        let tag = self.get_tag::<SectionsTag>();
+        tag.map(|t| {
+            assert!((t.entry_size * t.shndx) <= t.size);
+            t.sections()
+        })
+    }
+
+    pub fn get_tag<TagT: TagTrait + ?Sized + 'a>(&'a self) -> Option<&'a TagT> {
         self.tags()
-        .find(|tag| tag.tag_type == TagT::ID.into())
-        .map(|tag| tag.cast_tag::<TagT>())
+            .find(|tag| tag.tag_type == TagT::ID.into())
+            .map(|tag| tag.cast_tag::<TagT>())
     }
     
     fn tags(&self) -> TagIter {
