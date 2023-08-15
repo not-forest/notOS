@@ -49,6 +49,12 @@ impl<T> Vec<T> {
         temp_vec
     }
 
+    /// Extends the vector by Iterator.
+    #[inline(always)]
+    pub fn extend<I: Iterator<Item = T>>(&mut self, iter: I) {
+        iter.map(|item| self.push(item));
+    }
+
     /// Pushes a value into the vectors head.
     #[inline(always)]
     pub fn push(&mut self, element: T) {
@@ -223,9 +229,13 @@ mod tests {
     }
 }
 
-impl<T, A> FromIterator<A> for Vec<T> {
-    fn from_iter<R: IntoIterator<Item = A>>(iter: R) -> Self {
-        Self::from_iter(iter)
+impl<T> FromIterator<T> for Vec<T> {
+    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
+        let mut temp_vec = Vec::new();
+        for item in iter {
+            temp_vec.push(item)
+        }
+        temp_vec
     }
 }
 
