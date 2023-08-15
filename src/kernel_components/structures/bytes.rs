@@ -21,6 +21,18 @@ impl<'a> Deref for Bytes<'a> {
     }
 }
 
+impl<'a> Into<Bytes<'a>> for &'a [u8] {
+    fn into(self) -> Bytes<'a> {
+        Bytes::new(self)
+    }
+}
+
+impl<'a> Into<&'a [u8]> for Bytes<'a> {
+    fn into(self) -> &'a [u8] {
+        self.0.as_ref()
+    }
+}
+
 pub trait AsBytes: Sized {
     fn as_bytes(&self) -> Bytes {
         let ptr = ptr::addr_of!(*self);
