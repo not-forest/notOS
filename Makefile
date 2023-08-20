@@ -1,8 +1,12 @@
 # The main building area
 ARCH := x86_64
+
 KERNEL := target/$(ARCH)-notOS/debug/notOS
+RELEASE := target/$(ARCH)-notOS/release/notOS
 TEST_KERNEL := target/test/latest_tests
+
 ISO := build/notOS-$(ARCH).iso
+RELEASE_ISO := build/notOS-$(ARCH)-release.iso
 TEST_ISO := build/tests/notOS-$(ARCH).iso
 
 GRUB_CFG := src/arch/$(ARCH)/grub.cfg
@@ -12,13 +16,22 @@ ASSEMBLY_SOURCE_FILES := $(wildcard src/arch/$(ARCH)/*.asm)
 ASSEMBLY_OBJECT_FILES := $(patsubst src/arch/$(ARCH)/%.asm, build/arch/$(ARCH)/%.o, $(ASSEMBLY_SOURCE_FILES))
 
 
-.PHONY: all clean run test iso
+.PHONY: all clean run release test iso
 
 all: $(KERNEL)
+
+stop:
+	@kill $$(pgrep -x qemu-system-x86)
 
 clean:
 	@rm -rf build
 
+# Compile assembly files
+build/arch/$(ARCH)/%.o: src/arch/$(ARCH)/%.asm
+	@mkdir -p $(dir $@)
+	@nasm -felf64 $< -o $@
+
+# Debugging section
 run: $(ISO)
 	@qemu-system-x86_64 -cdrom $(ISO) -s -S & 
 	@echo "Waiting for QEMU to start..."
@@ -37,11 +50,30 @@ $(ISO): $(KERNEL) build_kernel $(GRUB_CFG)
 $(KERNEL): $(ASSEMBLY_OBJECT_FILES)
 	@ar crus build/libbootloader.a $(ASSEMBLY_OBJECT_FILES)
 
+
 build_kernel:
 	@RUST_TARGET_PATH=$(CURDIR) xargo build
 
-stop:
-	@kill $$(pgrep -x qemu-system-x86)
+
+# Release section
+release: $(RELEASE_ISO)
+	@qemu-system-x86_64 -cdrom $(RELEASE_ISO) -s -S & 
+	@echo "Waiting for QEMU to start..."
+	@sleep 2
+	@gdb -ex "target remote :$(GDB_PORT)" -ex "symbol-file $(RELEASE)" -ex "layout asm"
+
+$(RELEASE): $(ASSEMBLY_OBJECT_FILES)
+	@ar crus build/libbootloader.a $(ASSEMBLY_OBJECT_FILES)
+
+$(RELEASE_ISO): $(RELEASE) build_release $(GRUB_CFG)
+	@mkdir -p build/isofiles/boot/grub
+	@cp $(RELEASE) build/isofiles/boot/kernel.bin
+	@cp $(GRUB_CFG) build/isofiles/boot/grub
+	@grub-mkrescue --verbose -o $(RELEASE_ISO) build/isofiles 2> /dev/null
+	@rm -rf build/isofiles
+
+build_release:
+	@RUST_TARGET_PATH=$(CURDIR) xargo build --release
 
 
 #Tests
@@ -62,8 +94,3 @@ test_build:
 	@RUST_TARGET_PATH=$(CURDIR) cargo test --no-run --message-format=json > latest_test.json
 	@python3 extract.py
 
-
-# Compile assembly files
-build/arch/$(ARCH)/%.o: src/arch/$(ARCH)/%.asm
-	@mkdir -p $(dir $@)
-	@nasm -felf64 $< -o $@
