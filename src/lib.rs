@@ -13,7 +13,7 @@
 /// I hope, will be robust for this specific OS.
 /// 
 /// # PS
-/// Things will get commented from time to time because this library can be used for own OS implementations. Different architectures will
+/// Things will get commented from time to time because this semi-stolen library can be used for own OS implementations. Different architectures will
 /// be added in a far future. Some implementations may disappear in the future as the library will get optimized and change to not plagiarize
 /// other's code fully from top to bottom. Some implementations may change a lot because author will gain more knowledge in this field and improve 
 /// performance of the overall code. Since author is learning by creating this whole thing out, there may be a lot of dumb decisions and implementations
@@ -88,6 +88,7 @@ pub mod kernel_components {
         pub mod tags;
 
         pub use memory_module::{InfoPointer, BootInfoHeader};
+        pub use frames::AreaFrameAllocator;
     }
 
     pub mod virtualization {
@@ -98,6 +99,10 @@ pub mod kernel_components {
     }
 
 }
+
+/// Custom types for overall use and better readability.
+pub type PhysicalAddress = u64;
+pub type VirtualAddress = u64;
 
 use core::panic::PanicInfo;
 
