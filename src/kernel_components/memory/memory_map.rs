@@ -65,6 +65,18 @@ impl MemoryMapTag {
     pub fn memory_areas(&self) -> &[MemoryArea] {
         &self.areas
     }
+
+    /// Converts areas in the memory map tag into 'MemoryAreaIter'
+    pub fn memory_map_iter(&self) -> MemoryAreaIter {
+        let self_ptr = self as *const MemoryMapTag;
+        let start_area = (&self.areas[0]) as *const MemoryArea;
+        MemoryAreaIter {
+            current_area: start_area as u64,
+            last_area: (self_ptr as *const () as u64 + self.size as u64 - 1),
+            entry_size: self.entry_size,
+            phantom: PhantomData,
+        }
+    }
 }
 
 impl TagTrait for MemoryMapTag {
@@ -183,16 +195,16 @@ pub struct MemoryAreaIter {
     current_area: u64,
     last_area: u64,
     entry_size: u32,
-    phantom: PhantomData<MemoryArea>
+    phantom: PhantomData<&'static MemoryArea>
 }
 
 impl Iterator for MemoryAreaIter {
-    type Item = MemoryArea;
+    type Item = &'static MemoryArea;
     fn next(&mut self) -> Option<Self::Item> {
         if self.current_area > self.last_area {
             None
         } else {
-            let area = unsafe { *(self.current_area as *const MemoryArea) };
+            let area = unsafe { &*(self.current_area as *const MemoryArea) };
             self.current_area += self.entry_size as u64;
             Some(area)
         }
