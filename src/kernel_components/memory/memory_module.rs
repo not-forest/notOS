@@ -97,6 +97,31 @@ impl<'a> InfoPointer<'a> {
             .find(|tag| tag.tag_type == TagT::ID.into())
             .map(|tag| tag.cast_tag::<TagT>())
     }
+
+    /// Returns the total size of boot info header.
+    pub fn total(&self) -> u32 {
+        self.0.header.total
+    }
+
+    /// Returns the start of the kernel
+    pub fn kstart(&self) -> u64 {
+        self
+            .elf_sections_tag()
+            .expect("Elf-sections tag required.")
+            .map(|s| s.get().addr())
+            .min()
+            .unwrap()
+    }
+
+    /// Returns the end of the kernel.
+    pub fn kend(&self) -> u64 {
+        self
+            .elf_sections_tag()
+            .expect("Elf-sections tag required.")
+            .map(|s| s.get().addr())
+            .max()
+            .unwrap()
+    }
     
     fn tags(&self) -> TagIter {
         TagIter::new(&self.0.tags)
