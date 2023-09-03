@@ -45,6 +45,7 @@ pub mod kernel_components {
         pub mod single;
         pub mod iternum;
         pub mod bytes;
+        pub mod bitflags;
 
         pub mod boxed {
             pub mod boxed_dst;
@@ -64,6 +65,7 @@ pub mod kernel_components {
         pub use bytes::{AsBytes, Bytes};
         pub use iternum::IternumTrait;
         pub use single::{Once, Single};
+        pub use bitflags::BitNode;
     }
 
     pub mod instructions {
@@ -84,10 +86,15 @@ pub mod kernel_components {
         pub mod memory_module;
         pub mod memory_map;
         pub mod sections;
-        pub mod frames;
         pub mod tags;
 
+        pub mod frames;
+        pub mod paging;
+        pub mod owned_tables;
+
         pub use memory_module::{InfoPointer, BootInfoHeader};
+        pub use paging::{Page, Table, Entry, EntryFlags};
+        pub use owned_tables::ActivePageTable;
         pub use frames::AreaFrameAllocator;
     }
 
@@ -101,8 +108,8 @@ pub mod kernel_components {
 }
 
 /// Custom types for overall use and better readability.
-pub type PhysicalAddress = u64;
-pub type VirtualAddress = u64;
+pub type PhysicalAddress = usize;
+pub type VirtualAddress = usize;
 
 use core::panic::PanicInfo;
 
