@@ -10,7 +10,7 @@ use crate::AsBytes;
 use crate::kernel_components::memory::global_alloc::{GAllocator, GLOBAL_ALLOCATOR};
 use super::raw_vector::RawVec;
 
-/// A naive vector implementation that does not allow ZST's.
+/// Fully working vector implementation that allocates on the global heap..
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Vec<T: Sized> {
     pub buf: RawVec<T>,
