@@ -1,19 +1,24 @@
 /// Physical memory management. Frames and allocation.
 
 use super::memory_map::{MemoryArea, MemoryAreaIter};
+use crate::PhysicalAddress;
 
 /// The size of each individual page chunk.
-const PAGE_SIZE: usize = 4096;
+pub const PAGE_SIZE: usize = 4096;
 
 /// A frame structure, which is just a pointer counter to the next frame
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Frame {
-    num: usize,
+    pub num: usize,
 }
 
 impl Frame {
-    fn info_address(address: usize) -> Frame {
+    pub fn info_address(address: usize) -> Frame {
         Frame { num: address / PAGE_SIZE }
+    }
+
+    pub fn start_address(&self) -> PhysicalAddress {
+        self.num * PAGE_SIZE
     }
 }
 
