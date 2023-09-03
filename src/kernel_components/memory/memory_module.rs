@@ -1,7 +1,7 @@
 // Memory module for memory management. This is the entry point of memory functions and structs. 
 
 use core::mem::size_of;
-use crate::MbiLoadError;
+use crate::{ MbiLoadError, VirtualAddress, PhysicalAddress};
 
 use super::{
     tags::{EndTag, TagTrait, TagIter}, 
@@ -128,4 +128,82 @@ impl<'a> InfoPointer<'a> {
     }
 }
 
+#[test_case]
+fn memory_areas_test() {
+    use crate::{println, print, Color};
 
+    let multiboot_memory_address = 475552;
+
+    let boot_info = unsafe { InfoPointer::load(multiboot_memory_address as *const BootInfoHeader ) }.unwrap();
+    let memory_map_tag = boot_info.memory_map_tag()
+        .expect("Memory map tag required.");
+
+    let kernel_start = boot_info.kstart();
+    let kernel_end = boot_info.kend();
+    let multiboot_start = multiboot_memory_address;
+    let multiboot_end = multiboot_start + ( boot_info.total() as usize );
+
+    println!("Memory Areas:");
+    for area in memory_map_tag.memory_areas() {
+        println!(Color::GREEN; "      start: 0x{:x}, length: 0x{:x}", area.base_addr, area.length);
+    }
+}
+
+#[test_case]
+fn kernel_sections_test() {
+    use crate::{println, print, Color};
+
+    let multiboot_memory_address = 475552;
+
+    let boot_info = unsafe { InfoPointer::load(multiboot_memory_address as *const BootInfoHeader ) }.unwrap();
+    let memory_map_tag = boot_info.memory_map_tag()
+        .expect("Memory map tag required.");
+    let elf_sections_tag = boot_info.elf_sections_tag()
+        .expect("Elf-sections tag required.");
+
+    let kernel_start = boot_info.kstart();
+    let kernel_end = boot_info.kend();
+    let multiboot_start = multiboot_memory_address;
+    let multiboot_end = multiboot_start + ( boot_info.total() as usize );
+
+    println!("Kernel Sections:");
+    for (num, section) in elf_sections_tag.enumerate() {
+        let section_inner = section.get();
+        println!(Color::LIGHTGREEN; "      addr: 0x{:x}, size: 0x{:x}, flags: 0x{:x}, number: {}", section_inner.addr(), section_inner.size(), section_inner.flags(), num);
+    }
+}
+
+#[test_case]
+fn frame_allocator_test() {
+    use crate::{println, print, Color};
+    use super::{AreaFrameAllocator, frames::FrameAlloc};
+
+    let multiboot_memory_address = 475552;
+
+    let boot_info = unsafe { InfoPointer::load(multiboot_memory_address as *const BootInfoHeader ) }.unwrap();
+    let memory_map_tag = boot_info.memory_map_tag()
+        .expect("Memory map tag required.");
+    let elf_sections_tag = boot_info.elf_sections_tag()
+        .expect("Elf-sections tag required.");
+
+    let kernel_start = boot_info.kstart();
+    let kernel_end = boot_info.kend();
+    let multiboot_start = multiboot_memory_address;
+    let multiboot_end = multiboot_start + ( boot_info.total() as usize );
+
+    let mut frame_allocator = AreaFrameAllocator::new(
+        kernel_start as usize, 
+        kernel_end as usize, 
+        multiboot_start, 
+        multiboot_end,
+        memory_map_tag.memory_map_iter(),
+    );
+
+    println!("Allocating all of the frames!");
+    for i in 0.. {
+        if let None = frame_allocator.alloc() {
+            println!(Color::MAGENTA; "Allocated {} frames", i);
+            break;
+        }
+    }
+} 
