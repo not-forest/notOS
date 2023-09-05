@@ -11,6 +11,7 @@ use super::{
 use crate::{VirtualAddress, PhysicalAddress};
 use core::ptr::NonNull;
 use core::ops::{Deref, DerefMut};
+use core::arch::asm;
 
 pub struct ActivePageTable {
     p4: NonNull<Table<Level4>>
@@ -109,8 +110,14 @@ impl ActivePageTable {
         
         let frame = p1[page.p1_index()].pointed_frame().unwrap();
         p1[page.p1_index()].set_unused();
+        
+        //Flushing the given address in the TLB via 'invlpg' asm instruction. 
+        unsafe {
+            asm!("invlpg [{}]", in(reg) page.start_address(), options(nostack, preserves_flags));
+        }
+
         // TODO free p(1,2,3) table if empty
-        allocator.dealloc(frame);
+        //allocator.dealloc(frame);
     }
 
     fn get(&self) -> &Table<Level4> {
