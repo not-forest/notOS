@@ -7,18 +7,45 @@ use crate::PhysicalAddress;
 pub const PAGE_SIZE: usize = 4096;
 
 /// A frame structure, which is just a pointer counter to the next frame
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Frame {
     pub num: usize,
 }
 
 impl Frame {
-    pub fn info_address(address: usize) -> Frame {
-        Frame { num: address / PAGE_SIZE }
+    pub fn info_address(address: usize) -> Self {
+        Self { num: address / PAGE_SIZE }
     }
 
     pub fn start_address(&self) -> PhysicalAddress {
         self.num * PAGE_SIZE
+    }
+
+    pub fn range_inclusive(start: Frame, end: Frame) -> FrameIter {
+        FrameIter { start, end }
+    }
+
+    fn clone(&self) -> Self {
+        Self { num: self.num }
+    }
+}
+
+pub struct FrameIter {
+    start: Frame,
+    end: Frame,
+}
+
+impl Iterator for FrameIter {
+    type Item = Frame;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.start <= self.end {
+            let frame = self.start.clone();
+            self.start.num += 1;
+            Some(frame)
+        } else {
+            None
+        }
     }
 }
 
@@ -87,9 +114,7 @@ impl FrameAlloc for AreaFrameAllocator {
     /// Allocates the frame in the memory area. Returns the allocated Frame.
     fn alloc(&mut self) -> Option<Frame> {
         if let Some(area) = self.current_area {
-            /// Fake "cloning". The Frame itself is not a Clone, therefore 
-            /// we should construct the identical Frame.
-            let frame = Frame { num: self.next_free_frame.num };
+            let frame = self.next_free_frame.clone();
 
             let current_area_last_frame = {
                 let address = area.base_addr + area.length - 1;
