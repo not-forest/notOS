@@ -6,10 +6,7 @@ use core::ops::Deref;
 
 use proc_macros::Iternum;
 use crate::{Vec, AsBytes};
-use crate::kernel_components::structures::{
-    IternumTrait,
-    boxed::BoxedDst,
-};
+use crate::kernel_components::structures::boxed::BoxedDst;
 
 use super::tags::{TagTrait, TagType, TagTypeId, Tag};
 
