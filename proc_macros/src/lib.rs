@@ -34,7 +34,9 @@ pub fn iternum(input: TokenStream) -> TokenStream {
             let count_variants = variant_names.clone().count();
 
             let gen = quote! {
-                impl crate::kernel_components::structures::IternumTrait for #enum_ident {
+                use crate::kernel_components::structures::IternumTrait;
+
+                impl IternumTrait for #enum_ident {
                     const SIZE: usize = #count_variants;
                     
                     fn iter() -> [Self; #count_variants] {
