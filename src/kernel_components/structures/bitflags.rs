@@ -224,6 +224,10 @@ macro_rules! _inner_bitflags {
                 Self::ALL
             }
 
+            pub fn bits(&self) -> $underlying {
+                <$underlying>::from(*self)
+            }
+
             pub fn from_bits_truncate(bits: $underlying) -> crate::kernel_components::structures::BitNode<$underlying> {
                 ($name::Custom(bits) & Self::all()).into()
             }
