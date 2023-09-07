@@ -7,7 +7,6 @@ use core::fmt::{Debug, Formatter};
 use core::hash::Hash;
 use core::marker::PhantomData;
 use core::str::Utf8Error;
-use crate::kernel_components::structures::IternumTrait;
 use proc_macros::Iternum;
 
 // Tag type is a wrapper around u32 for convenient use of binary representation.
