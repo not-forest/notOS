@@ -14,7 +14,7 @@ use core::marker::PhantomData;
 /// A total amount of entries.
 pub(crate) const ENTRY_COUNT: usize = 512;
 /// A mask that masks bits 12-51.
-const BIT_MASK: usize = 0x000fffff_fffff000;
+pub const BIT_MASK: usize = 0x000fffff_fffff000;
 
 /// The address of P4 table in the kernel.
 pub const P4: *mut Table<Level4> = 0o177777_777_777_777_777_0000 as *mut _;
@@ -53,6 +53,7 @@ impl HierarchicalLevel for Level2 {
 }
 
 /// A representation of a single page. It is just like a Frame, but virtual.
+#[derive(Debug, Clone, Copy)]
 pub struct Page {
     num: usize
 }
@@ -67,6 +68,7 @@ impl Page {
         Self { num: address / PAGE_SIZE }
     }
 
+    /// Returns the starting address of the page.
     pub fn start_address(&self) -> usize {
         self.num * PAGE_SIZE
     }
@@ -185,7 +187,6 @@ impl<L: TableLevel> IndexMut<usize> for Table<L> {
 
 /// Bitflags that hold information about the physical address.
 bitflags! {
-    #[allow(non_camel_case_types)]
     #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
     pub struct EntryFlags: u64 {
         /// The page is curently in memory.
