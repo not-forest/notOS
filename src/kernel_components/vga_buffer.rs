@@ -104,11 +104,10 @@ impl Logger {
 
 }
 
-// Implement the fmt::Write trait for the Logger, allowing it to be used with formatted printing macros.
+/// Implements the fmt::Write trait for the Logger, allowing it to be used with formatted printing macros.
 impl fmt::Write for Logger {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         self.write_str(s);
-        self.color_code = ColorCode::new(Color::WHITE, Color::BLACK);
         Ok(())
     }
 }
@@ -200,10 +199,12 @@ macro_rules! print {
     ($fr:expr; $($arg:tt)*) => {
         $crate::kernel_components::vga_buffer::_coloring($fr, None);
         print!($($arg)*);
+        $crate::kernel_components::vga_buffer::_coloring(crate::Color::WHITE, Some(crate::Color::BLACK));
     };
     ($fr:expr; $bg:expr; $($arg:tt)*) => {
         $crate::kernel_components::vga_buffer::_coloring($fr, Some($bg));
         print!($($arg)*);
+        $crate::kernel_components::vga_buffer::_coloring(crate::Color::WHITE, Some(crate::Color::BLACK));
     };
     ($($arg:tt)*) => ($crate::kernel_components::vga_buffer::_print(format_args!($($arg)*)));
 }
@@ -230,24 +231,29 @@ macro_rules! print {
 /// '''
 #[macro_export]
 macro_rules! println {
-    () => (crate::print!("\n"));
-    ($fmt:expr) => (crate::print!(concat!($fmt, "\n")));
-    ($fmt:expr, $($arg:tt)*) => (crate::print!(concat!($fmt, "\n"), $($arg)*));
+    () => (crate::print!('\n'));
+    ($fmt:expr) => (crate::print!(concat!($fmt, '\n')));
+    ($fmt:expr, $($arg:tt)*) => (crate::print!(concat!($fmt, '\n'), $($arg)*));
+    
     ($fr:expr; $fmt:expr) => {
         $crate::kernel_components::vga_buffer::_coloring($fr, None);
         println!($fmt);
+        $crate::kernel_components::vga_buffer::_coloring(crate::Color::WHITE, Some(crate::Color::BLACK));
     };
     ($fr:expr; $bg:expr; $fmt:expr) => {
         $crate::kernel_components::vga_buffer::_coloring($fr, Some($bg));
         println!($fmt);
+        $crate::kernel_components::vga_buffer::_coloring(crate::Color::WHITE, Some(crate::Color::BLACK));
     };
     ($fr:expr; $fmt:expr, $($arg:tt)*) => {
         $crate::kernel_components::vga_buffer::_coloring($fr, None);
         println!($fmt, $($arg)*);
+        $crate::kernel_components::vga_buffer::_coloring(crate::Color::WHITE, Some(crate::Color::BLACK));
     };
     ($fr:expr; $bg:expr; $fmt:expr, $($arg:tt)*) => {
         $crate::kernel_components::vga_buffer::_coloring($fr, Some($bg));
         println!($fmt, $($arg)*);
+        $crate::kernel_components::vga_buffer::_coloring(crate::Color::WHITE, Some(crate::Color::BLACK));
     };
 }
 
