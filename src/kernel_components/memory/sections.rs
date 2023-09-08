@@ -9,11 +9,8 @@ use core::ops::{Deref, DerefMut};
 use core::ptr::Pointee;
 
 use proc_macros::Iternum;
-use crate::{Vec, AsBytes};
-use crate::kernel_components::structures::{
-    IternumTrait,
-    boxed::BoxedDst,
-};
+use crate::{Vec, AsBytes, bitflags};
+use crate::kernel_components::structures::boxed::BoxedDst;
 
 use super::tags::{TagTrait, TagType, TagTypeId, Tag};
 
@@ -122,6 +119,16 @@ impl ElfSection {
         self.get().typ()
     }
 
+    /// Get sections flag.
+    pub fn flags(&self) -> ElfSectionFlags {
+        ElfSectionFlags::from_bits_truncate(self.get().flags()).into()
+    }
+
+    /// Check if section is allocated
+    pub fn is_allocated(&self) -> bool {
+        ElfSectionFlags::ALLOCATED.is_in(self.flags().into())
+    }
+
     /// Read the name of the section.
     pub fn name(&self) -> Result<&str, Utf8Error> {
         use core::{slice, str};
@@ -174,6 +181,19 @@ impl ElfSection {
             s => panic!("Unexpected entry size: {}", s),
         };
         addr as *const _
+    }
+}
+
+bitflags! {
+    /// ELF Sections bitflags.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+    pub struct ElfSectionFlags: u64 {
+        /// The section contains data that should be writable during program execution.
+        const WRITABLE = 0x1,
+        /// The section is already allocated.
+        const ALLOCATED = 0x2,
+        /// The section contains executable machine instructions.
+        const EXECUTABLE = 0x4,
     }
 }
 
