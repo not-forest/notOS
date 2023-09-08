@@ -2,7 +2,10 @@
 /// Paging memory management scheme module. It separates the physical frames
 /// with it's virtual pages.
 
-use super::frames::{Frame, FrameAlloc, PAGE_SIZE};
+use super::{
+    frames::{Frame, FrameAlloc, PAGE_SIZE},
+    sections::{ElfSection, ElfSectionFlags},
+};
 use crate::{
     PhysicalAddress, VirtualAddress,
     kernel_components::structures::IternumTrait,
@@ -212,6 +215,21 @@ bitflags! {
         /// Forbid executing code on this page (the NXE bit in the
         /// EFER register must be set).
         const NO_EXECUTE =      1 << 63,
+    }
+}
+
+impl EntryFlags {
+    pub fn from_elf_section_flags(section: &ElfSection) -> Self {
+        let mut return_flags = Self::empty();
+        let section_flags = section.flags().into();
+
+        for flag in ElfSectionFlags::as_array() {
+            if flag.is_in(section_flags) {
+                return_flags |= u64::from(flag).into()
+            }
+        }
+
+        return_flags
     }
 }
 
