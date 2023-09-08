@@ -1,7 +1,8 @@
 /// Functions to manipulate with control registers.
  
-use crate::bitflags;
 use crate::kernel_components::memory::{frames::Frame, paging::BIT_MASK};
+use crate::kernel_components::instructions::TLB::Pcid;
+use crate::{bitflags, VirtualAddress};
 use core::arch::asm;
 
 /// Control flags that modify a basic operations of the CPU.
@@ -167,12 +168,74 @@ bitflags! {
     /// a priority class of 10 or more to be recognized. Loading TPR with 0 enables all external interrupts. Loading TPR with 15 (1111b) 
     /// disables all external interrupts.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-    pub struct Cr8Flags: u64 {
+    pub struct Cr8Flags: u8 {
         const BIT_ZERO =  1,
         const BIT_ONE =   1 << 1,
         const BIT_TWO =   1 << 2,
         const BIT_THREE = 1 << 3,
     };
+}
+
+impl Cr0 {
+    /// Read the current state of Cr0 register
+    #[inline]
+    pub fn read() -> Cr0Flags {
+        let value: u64;
+
+        unsafe {
+            asm!("mov {}, cr0", out(reg) value, options(nomem, nostack, preserves_flags));
+        }
+
+        value.into()
+    }
+
+    /// Write new flags into Cr0 register
+    /// 
+    /// # Safety
+    /// 
+    /// This function is unsafe because it's possible to violate memory
+    /// safety through it.
+    #[inline]
+    pub unsafe fn write(flags: Cr0Flags) {
+        let old_flags = Self::read();
+        let reserved = old_flags & !Cr0Flags::all();
+        let new_flags = reserved | flags;
+        
+        unsafe {
+            asm!("mov cr0, {}", in(reg) u64::from(new_flags), options(nostack, preserves_flags));
+        }
+    }
+
+    /// Enables write protect bit.
+    /// 
+    /// CPU ignores this bit in kernel mode by default. To enable write protection 
+    /// for the kernel, WRITE_PROTECT bit must be set in CR0 register.
+    pub fn enable_write_protect_bit() {
+        unsafe { Self::write(Cr0Flags::default() | Cr0Flags::WRITE_PROTECT) }
+    }
+}
+
+impl Default for Cr0Flags {
+    fn default() -> Self {
+        use Cr0Flags::*;
+        ENABLE_PROTECTED_MODE |
+        EXTENSION_TYPE        |
+        PAGING
+    }
+}
+
+impl Cr2 {
+    /// Read the current page fault linear address from the CR2 register.
+    #[inline]
+    pub fn read() -> VirtualAddress {
+        let value: usize;
+
+        unsafe {
+            asm!("mov {}, cr2", out(reg) value, options(nomem, nostack, preserves_flags));
+        }
+        
+        value
+    }
 }
 
 impl Cr3 {
@@ -181,23 +244,12 @@ impl Cr3 {
     /// Returns a physical 'Frame' and the corresponding bitflags.
     #[inline]
     pub fn read() -> (Frame, Cr3Flags) {
-        let (frame, value) = {
-            let value: usize;
-
-            unsafe {
-                asm!("mov {}, cr3", out(reg) value, options(nomem, nostack, preserves_flags));
-            }
-
-            let addr = value & BIT_MASK;
-            let frame = Frame::info_address(addr);
-
-            (frame, (value & 0xFFF) as u64)
-        };
-        let flags = Cr3Flags::from_bits_truncate(value);
-        (frame, flags.into())
+        let (frame, value) = Self::inner_read();
+        let flags = Cr3Flags::from_bits_truncate(value as u64).into();
+        (frame, flags)
     }
 
-    /// Write a new P4 table address into the CR3 register.
+    /// Write a new P4 table address into the CR3 register via bitflags.
     ///
     /// # Safety
     ///
@@ -205,11 +257,136 @@ impl Cr3 {
     /// changing the page mapping.
     #[inline]
     pub unsafe fn write(frame: Frame, flags: Cr3Flags) {
+        unsafe { Self::inner_write(frame, flags) }
+    }
+
+    /// Write a new P4 table address into the CR3 register via PCID.
+    ///
+    /// # Safety
+    ///
+    /// Changing the level 4 page table is unsafe, because it's possible to violate memory safety by
+    /// changing the page mapping.
+    pub unsafe fn write_pcid(frame: Frame, pcid: Pcid) {
+        unsafe { Self::inner_write(frame, (pcid.get() as u64).into()) }
+    }
+
+    /// Read the current P4 table address from the CR3 register along with PCID.
+    #[inline]
+    pub unsafe fn read_pcid() -> (Frame, Pcid) {
+        let (frame, value) = Self::inner_read();
+        (frame, Pcid::new(value).unwrap())
+    }
+
+    #[inline]
+    fn inner_read() -> (Frame, u16) {
+        let value: usize;
+        
+        unsafe {
+            asm!("mov {}, cr3", out(reg) value, options(nomem, nostack, preserves_flags));
+        }
+
+        let addr = value & BIT_MASK;
+        let frame = Frame::info_address(addr);
+        
+        (frame, (value & 0xFFF) as u16)
+    }
+
+    #[inline]
+    unsafe fn inner_write(frame: Frame, flags: Cr3Flags) {
         let addr = frame.start_address();
         let value = addr as u64 | flags.bits();
 
         unsafe {
             asm!("mov cr3, {}", in(reg) value, options(nostack, preserves_flags));
         }
+    }
+}
+
+impl Cr4 {
+    /// Read the current state of Cr0 register
+    pub fn read() -> Cr4Flags {
+        let value: u64;
+        
+        unsafe {
+            asm!("mov {}, cr4", out(reg) value, options(nomem, nostack, preserves_flags));
+        }
+
+        value.into()
+    }
+
+    /// Write flags to Cr4.
+    ///
+    /// # Safety
+    ///
+    /// This function is unsafe because it's possible to violate memory
+    /// safety through it, e.g. by overwriting the physical address extension
+    /// flag.
+    #[inline]
+    pub unsafe fn write(flags: Cr4Flags) {
+        let old_flags = Self::read();
+        let reserved = old_flags & !Cr4Flags::all();
+        let new_flags = reserved | flags;
+
+        unsafe {
+            asm!("mov cr4, {}", in(reg) u64::from(new_flags), options(nostack, preserves_flags));
+        }
+    }
+}
+
+impl Default for Cr4Flags {
+    fn default() -> Self {
+        Self::PHYSICAL_ADDRESS_EXTENSION
+    }
+}
+
+impl Cr8 {
+    /// Read external interrupts priorities as flags.
+    #[inline]
+    pub fn read() -> Cr8Flags {
+        let value: u64;
+        
+        unsafe {
+            asm!("mov {}, cr8", out(reg) value, options(nomem, nostack, preserves_flags));
+        }
+
+        (value as u8).into()
+    }
+
+    /// Write external interrupts priorities to Cr8 register.
+    ///
+    /// # Safety
+    ///
+    /// System software can use the TPR register to temporarily block low-priority 
+    /// interrupts from interrupting a high-priority task. This can lead to certain
+    /// problems with latency if not used right.
+    #[inline]
+    pub fn write(flags: Cr8Flags) {
+        let old_flags = Self::read();
+        let reserved = old_flags & !Cr8Flags::all();
+        let new_flags = reserved | flags;
+
+        unsafe {
+            asm!("mov cr8, {}", in(reg) u64::from(u8::from(new_flags)), options(nostack, preserves_flags));
+        }
+    }
+
+    /// Sets the priority to Cr8 register
+    /// 
+    /// The AMD64 architecture allows software to define up to 15 external interrupt-priority 
+    /// classes. Priority classes are numbered from 1 to 15, with priority-class 1 being 
+    /// the lowest and priority-class 15 the highest. 
+    /// 
+    /// For example, loading TPR with a value of 9 (1001b) blocks all interrupts with a priority 
+    /// class of 9 or less, while allowing all interrupts with a priority class of 10 or more to 
+    /// be recognized. Loading TPR with 0 enables all external interrupts. Loading TPR with 15 
+    /// (1111b) disables all external interrupts.
+    /// 
+    /// # Panics
+    /// 
+    /// This function will panic, if the input is larger than 15.
+    #[inline]
+    pub fn set_priority(amount: u8) {
+        assert!(amount <= 15, "The input must be smaller or equal to 15.");
+        Self::write(amount.into());
     }
 }
