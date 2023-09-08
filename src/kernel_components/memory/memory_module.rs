@@ -1,12 +1,16 @@
 // Memory module for memory management. This is the entry point of memory functions and structs. 
 
 use core::mem::size_of;
-use crate::{ MbiLoadError, VirtualAddress, PhysicalAddress};
+use crate::{MbiLoadError, VirtualAddress, PhysicalAddress, println};
 
 use super::{
+    Page, ActivePageTable,
     tags::{EndTag, TagTrait, TagIter}, 
     memory_map::MemoryMapTag,
-    sections::{SectionsTag, SectionIter},
+    sections::{SectionsTag, SectionIter}, 
+    frames::{Frame, FrameAlloc}, 
+    temporary_pages::TempPage, 
+    inactive_tables::InactivePageTable,
 };
 
 // This magic number has 
@@ -122,10 +126,102 @@ impl<'a> InfoPointer<'a> {
             .max()
             .unwrap()
     }
+
+    /// Returns the start of multiboot structure.
+    pub fn mstart(&self) -> usize {
+        &self.0.header as *const BootInfoHeader as usize
+    }
+
+    /// Returns the end of multiboot structure.
+    pub fn mend(&self) -> usize {
+        self.mstart() + ( self.total() as usize )
+    }
     
     fn tags(&self) -> TagIter {
         TagIter::new(&self.0.tags)
     }
+}
+
+/// Remaps sections of kernel.
+pub fn remap_kernel<A>(allocator: &mut A, boot_info: &InfoPointer) 
+    where A: FrameAlloc
+{
+    use crate::Color;
+
+    let mut temporary_page = TempPage::new( Page::containing_address(0xdeadbeaf), allocator);
+    let mut active_table = unsafe { ActivePageTable::new() };
+    let mut new_table = {
+        let frame = allocator.alloc().expect("no more frames to allocate.");
+        InactivePageTable::new(frame, &mut active_table, &mut temporary_page)
+    };
+
+    active_table.with(&mut new_table, &mut temporary_page, |mapper| {
+        use super::EntryFlags::{*, self};
+        
+        let elf_sections_tag = boot_info
+            .elf_sections_tag()
+            .expect("Elf-sections tag required.");
+
+        for section in elf_sections_tag {
+            use super::frames::PAGE_SIZE;
+
+            if !section.is_allocated() {
+                continue
+            }
+
+            if section.start_address() % PAGE_SIZE as u64 != 0 {
+                panic!("Sections must be page aligned! 
+                    Expected section to be {PAGE_SIZE} bytes aligned. 
+                    Received value: {:#x} which is not properly aligned.\n
+                    Section data:\n
+                            name: {}, 
+                            type: {:?}, 
+                            addr: {:#x},
+                            size: {:#x},
+                            alignment constraints: {}, 
+                            flags: {:#x}.\n", 
+                        section.start_address(), 
+                        section.name().unwrap_or("No name"),
+                        section.section_type(),
+                        section.start_address(), 
+                        section.size(),
+                        section.addralign(),
+                        section.get().flags());
+            }
+
+            println!(Color::LIGHTGREEN; "Mapping section at addr: {:#x}, size: {:#x}", section.start_address(), section.size());
+            
+            let flags = EntryFlags::from_elf_section_flags(&section);
+
+            let start_frame = Frame::info_address(section.start_address() as usize);
+            let end_frame = Frame::info_address(section.end_address() as usize - 1);
+            
+            for frame in Frame::range_inclusive(start_frame, end_frame) {
+                mapper.indentity_map(frame, flags, allocator);
+            }
+        }
+
+        // identity map the multiboot info structure.
+        let multiboot_start = Frame::info_address(boot_info.mstart());
+        let multiboot_end = Frame::info_address(boot_info.mend());
+
+        for frame in Frame::range_inclusive(multiboot_start, multiboot_end) {
+            mapper.indentity_map(frame, PRESENT, allocator);
+        }
+        
+        // identity map the VGA text buffer.
+        let vga_buffer_frame = Frame::info_address(0xb8000);
+        mapper.indentity_map(vga_buffer_frame, WRITABLE, allocator);
+
+    });
+
+    let old_table = active_table.switch(new_table);
+    let old_p4_page = Page::containing_address(
+        old_table.p4_frame.start_address()
+    );
+
+    active_table.unmap(old_p4_page, allocator);
+    println!(Color::LIGHTGRAY; "Guard page at {:#x}", old_p4_page.start_address());
 }
 
 #[test_case]
@@ -140,8 +236,8 @@ fn memory_areas_test() {
 
     let kernel_start = boot_info.kstart();
     let kernel_end = boot_info.kend();
-    let multiboot_start = multiboot_memory_address;
-    let multiboot_end = multiboot_start + ( boot_info.total() as usize );
+    let multiboot_start = boot_info.mstart();
+    let multiboot_end = boot_info.mend();
 
     println!("Memory Areas:");
     for area in memory_map_tag.memory_areas() {
@@ -163,8 +259,8 @@ fn kernel_sections_test() {
 
     let kernel_start = boot_info.kstart();
     let kernel_end = boot_info.kend();
-    let multiboot_start = multiboot_memory_address;
-    let multiboot_end = multiboot_start + ( boot_info.total() as usize );
+    let multiboot_start = boot_info.mstart();
+    let multiboot_end = boot_info.mend();
 
     println!("Kernel Sections:");
     for (num, section) in elf_sections_tag.enumerate() {
@@ -188,8 +284,8 @@ fn frame_allocator_test() {
 
     let kernel_start = boot_info.kstart();
     let kernel_end = boot_info.kend();
-    let multiboot_start = multiboot_memory_address;
-    let multiboot_end = multiboot_start + ( boot_info.total() as usize );
+    let multiboot_start = boot_info.mstart();
+    let multiboot_end = boot_info.mend();
 
     let mut frame_allocator = AreaFrameAllocator::new(
         kernel_start as usize, 
@@ -207,3 +303,55 @@ fn frame_allocator_test() {
         }
     }
 } 
+
+#[test_case]
+fn mapping_kernel() {
+    use crate::{println, print, 
+        kernel_components::
+            memory::{
+                InfoPointer, BootInfoHeader, 
+                AreaFrameAllocator, ActivePageTable, Page,
+                EntryFlags,
+                frames::FrameAlloc  
+        },            
+        Color,
+    };
+    
+    let multiboot_memory_address = 475552;
+    let boot_info = unsafe { InfoPointer::load(multiboot_memory_address as *const BootInfoHeader ) }.unwrap();
+        let memory_map_tag = boot_info.memory_map_tag()
+            .expect("Memory map tag required.");
+        let elf_sections_tag = boot_info.elf_sections_tag()
+            .expect("Elf-sections tag required.");
+
+        let kernel_start = boot_info.kstart();
+        let kernel_end = boot_info.kend();
+        let multiboot_start = boot_info.mstart();
+        let multiboot_end = boot_info.mend();
+
+        let mut frame_allocator = AreaFrameAllocator::new(
+            kernel_start as usize, 
+            kernel_end as usize, 
+            multiboot_start, 
+            multiboot_end,
+            memory_map_tag.memory_map_iter(),
+        );
+
+        let mut page_table = unsafe { ActivePageTable::new() };
+        
+        let addr = 42 * 512 * 512 * 4096; // 42th P3 entry.
+        let page = Page::containing_address(addr);
+        let frame = frame_allocator.alloc().expect("No more frames to allocate.");
+
+        println!(Color::CYAN; "None = {:?}, map to {:?}", page_table.translate(addr), frame);
+        page_table.map_to(page, frame, EntryFlags::empty(), &mut frame_allocator);
+        println!(Color::LIGHTBLUE; "Some = {:?}", page_table.translate(addr));
+        println!(Color::LIGHTGREEN; "Next free frame: {:?}", frame_allocator.alloc());
+        
+        println!("{:#x}", unsafe {
+            *(Page::containing_address(addr).start_address() as *const u64)
+        });
+
+        page_table.unmap(Page::containing_address(addr), &mut frame_allocator);
+        println!(Color::MAGENTA; "None = {:?}", page_table.translate(addr));
+}
