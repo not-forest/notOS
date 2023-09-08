@@ -71,8 +71,14 @@ pub mod kernel_components {
     pub mod instructions {
         pub mod random;
         pub mod interrupt;
+        pub mod TLB;
 
         pub use random::{Random, RdRand, RdSeed};
+    }
+
+    pub mod registers {
+        pub mod control;
+        pub mod mxscr;
     }
 
     pub mod sync {
@@ -91,11 +97,16 @@ pub mod kernel_components {
         pub mod frames;
         pub mod paging;
         pub mod owned_tables;
+        pub mod temporary_pages;
+        pub mod inactive_tables;
 
-        pub use memory_module::{InfoPointer, BootInfoHeader};
+        pub use memory_module::{InfoPointer, BootInfoHeader, remap_kernel};
+        pub use frames::AreaFrameAllocator;
+        
         pub use paging::{Page, Table, Entry, EntryFlags};
         pub use owned_tables::ActivePageTable;
-        pub use frames::AreaFrameAllocator;
+        pub use temporary_pages::TempPage;
+        pub use inactive_tables::InactivePageTable;
     }
 
     pub mod virtualization {
