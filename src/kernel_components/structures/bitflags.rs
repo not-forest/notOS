@@ -212,16 +212,21 @@ macro_rules! _inner_bitflags {
         }
 
         impl $name {
+            
+            pub const fn empty() -> Self {
+                Self::EMPTY
+            }
+        
+            pub const fn all() -> Self {
+                Self::ALL
+            }
+            
             pub fn is_in(&self, bits: $underlying) -> bool {
                 self.as_node().is_in(bits)
             }
 
-            pub fn empty() -> Self {
-                Self::EMPTY
-            }
-        
-            pub fn all() -> Self {
-                Self::ALL
+            pub fn as_array() -> [Self; [$($name::$flag),*].len()] {
+                [$($name::$flag),*]
             }
 
             pub fn bits(&self) -> $underlying {
@@ -276,6 +281,12 @@ macro_rules! _inner_bitflags {
             }
         }
 
+        impl core::ops::BitAndAssign for $name {
+            fn bitand_assign(&mut self, rhs: Self) {
+                *self = *self & rhs
+            }
+        }
+
         impl core::ops::BitOr for $name {
             type Output = Self;
             fn bitor(self, rhs: Self) -> Self::Output {
@@ -283,10 +294,22 @@ macro_rules! _inner_bitflags {
             }
         }
 
+        impl core::ops::BitOrAssign for $name {
+            fn bitor_assign(&mut self, rhs: Self) {
+                *self = *self | rhs
+            }
+        }
+
         impl core::ops::BitXor for $name {
             type Output = Self;
             fn bitxor(self, rhs: Self) -> Self::Output {
                 $name::Custom(<$underlying>::from(self) ^ <$underlying>::from(rhs))
+            }
+        }
+
+        impl core::ops::BitXorAssign for $name {
+            fn bitxor_assign(&mut self, rhs: Self) {
+                *self = *self ^ rhs
             }
         }
 
