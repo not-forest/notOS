@@ -1,9 +1,10 @@
 // A basic mutex implementation for the OS with a spin loop.
 
+use core::fmt::{Debug, Display};
+use core::error::Error;
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::cell::UnsafeCell;
 use core::ops::{Drop, Deref, DerefMut};
-use crate::kernel_components::error::PoisonError;
 
 pub struct Mutex<T: ?Sized> {
     status: AtomicBool,
@@ -79,3 +80,13 @@ impl<'a, T> DerefMut for MutexGuard<'a, T> {
 
 unsafe impl<T> Sync for Mutex<T> {}
 unsafe impl<T> Send for Mutex<T> {}
+
+#[derive(Debug)]
+pub struct PoisonError;
+impl Error for PoisonError {}
+
+impl Display for PoisonError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "The mutex is poisoned and cannot longer be used")
+    }
+}
