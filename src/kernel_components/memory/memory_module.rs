@@ -1,7 +1,9 @@
 // Memory module for memory management. This is the entry point of memory functions and structs. 
 
 use core::mem::size_of;
-use crate::{MbiLoadError, VirtualAddress, PhysicalAddress, println};
+use core::fmt::{Debug, Display};
+use core::error::Error;
+use crate::{VirtualAddress, PhysicalAddress, println};
 
 use super::{
     Page, ActivePageTable,
@@ -223,6 +225,31 @@ pub fn remap_kernel<A>(allocator: &mut A, boot_info: &InfoPointer)
     active_table.unmap(old_p4_page, allocator);
     println!(Color::LIGHTGRAY; "Guard page at {:#x}", old_p4_page.start_address());
 }
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum MbiLoadError {
+    IllegalAddress,
+    IllegalTotalSize(u32),
+    NoEndTag,
+}
+
+impl Display for MbiLoadError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::IllegalAddress => {
+                write!(f, "Illegal address encountered during MBI load")
+            }
+            Self::IllegalTotalSize(size) => {
+                write!(f, "Illegal total size encountered during MBI load: {}", size)
+            }
+            Self::NoEndTag => {
+                write!(f, "No end tag found during MBI load")
+            }
+        }
+    }
+}
+
+impl Error for MbiLoadError {}
 
 #[test_case]
 fn memory_areas_test() {
