@@ -7,6 +7,7 @@
 /// reused across the application.
 
 use crate::kernel_components::sync::Mutex;
+use crate::{Vec, single};
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::cell::{UnsafeCell, Cell};
 use core::ops::{Deref, DerefMut};
@@ -17,7 +18,7 @@ use core::ops::{Deref, DerefMut};
 /// and then reused for all subsequent accesses. It uses atomic operations
 /// and a mutex for synchronization to guarantee thread-safe initialization.
 pub struct Once<T> {
-    initialized: Mutex<AtomicBool>,
+    initialized: AtomicBool,
     data: UnsafeCell<Option<T>>,
 }
 
@@ -26,7 +27,7 @@ impl<T> Once<T> {
     #[inline(always)]
     pub const fn new() -> Self {
         Self {
-            initialized: Mutex::new(AtomicBool::new(false)),
+            initialized: AtomicBool::new(false),
             data: UnsafeCell::new(None),
         }
     }
@@ -50,9 +51,21 @@ impl<T> Once<T> {
     /// ```
     #[inline(always)]
     pub fn call<F>(&self, init: F) where F: FnOnce() -> T {
-        if !self.initialized.lock().load(Ordering::Acquire) {
+        if !self.initialized.load(Ordering::Acquire) {
             unsafe { *self.data.get() = Some(init()) };
-            self.initialized.lock().store(true, Ordering::Release);
+            self.initialized.store(true, Ordering::Release);
+        }
+    }
+
+    /// Calls the given initialization function if the value has not been initialized yet.
+    ///
+    /// If the value is already initialized, this method has no effect. Arguments can be provided
+    /// for the closure.
+    #[inline(always)]
+    pub fn call_with_args<F, A>(&self, args: A, init: F) where F: FnOnce(A) -> T {
+        if !self.initialized.load(Ordering::Acquire) {
+            unsafe { *self.data.get() = Some(init(args)) };
+            self.initialized.store(true, Ordering::Release);
         }
     }
 
@@ -158,6 +171,28 @@ unsafe impl<T> Sync for Once<T> {}
 unsafe impl<T> Send for Once<T> {}
 unsafe impl<T, F> Sync for Single<T, F> {}
 unsafe impl<T, F> Send for Single<T, F> {}
+
+/// A macro to create global 'Once' instance.
+/// 
+/// Since the static needs to know data types, the output of closure that will be provided must be written
+/// from the very start.
+/// 
+/// # Examples
+///
+/// ```
+/// use crate::global_once;
+///
+/// // We are creating the static instance of 'Once', knowing that the function that we will
+/// // insert must return u8!
+/// global_once!(MY_SYSTEM_FUNCTION_THAT_MUST_BE_CALLED_ONLY_ONCE -> u8);
+/// 
+/// ```
+#[macro_export]
+macro_rules! global_once {
+    ($name:ident -> $type:ty) => {
+        static $name: $crate::kernel_components::structures::Once<$type> = $crate::kernel_components::structures::Once::new();
+    };
+}
 
 /// A macro for creating static instances with lazy initialization.
 ///
