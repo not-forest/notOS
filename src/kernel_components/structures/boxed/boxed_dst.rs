@@ -5,7 +5,7 @@
 use crate::Bytes;
 use crate::kernel_components::memory::{
     tags::{Tag, TagTrait, TagTypeId},
-    global_alloc::{GAllocator, GLOBAL_ALLOCATOR},
+    allocators::global_alloc::{GAllocator, GLOBAL_ALLOCATOR},
 };
 use core::alloc::{GlobalAlloc, Layout};
 use core::marker::PhantomData;
