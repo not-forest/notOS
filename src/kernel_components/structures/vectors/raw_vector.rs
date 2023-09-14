@@ -5,7 +5,7 @@ use core::{
     ptr::NonNull, 
     alloc::{Layout, GlobalAlloc},
 };
-use crate::kernel_components::memory::global_alloc::{GLOBAL_ALLOCATOR, GAllocator};
+use crate::kernel_components::memory::allocators::global_alloc::{GLOBAL_ALLOCATOR, GAllocator};
 
 /// This node should be used in vectors and vector-like types.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -48,17 +48,17 @@ impl<T> RawVec<T> {
         assert!(new_layout.size() <= isize::MAX as usize, "Allocation is too large.");
 
         let new_ptr = if self.cap == 0 {
-            unsafe { GlobalAlloc::alloc(&GLOBAL_ALLOCATOR, new_layout) }
+            unsafe { GLOBAL_ALLOCATOR.alloc(new_layout) }
         } else {
             let old_layout = Layout::array::<T>(self.cap).unwrap();
             let old_ptr = self.ptr.as_ptr() as *mut u8;
-            unsafe { GlobalAlloc::realloc(&GLOBAL_ALLOCATOR, old_ptr, old_layout, new_layout.size()) }
+            unsafe { GLOBAL_ALLOCATOR.realloc(old_ptr, old_layout, new_layout.size()) }
         };
 
         // If allocation fails, `new_ptr` will be null, in which case we abort.
         self.ptr = match NonNull::new(new_ptr as *mut T) {
             Some(p) => p,
-            None => panic!("Allocation error!!!")
+            None => panic!("Allocation error!")
         };
         self.cap = new_cap;
     } 
@@ -75,7 +75,7 @@ impl<T: Sized> Drop for RawVec<T> {
         if self.cap != 0 && elem_size != 0 {
             let layout = Layout::array::<T>(self.cap).unwrap();
             unsafe {
-                GlobalAlloc::dealloc(&GLOBAL_ALLOCATOR, self.ptr.as_ptr() as *mut u8, layout);
+                GLOBAL_ALLOCATOR.dealloc(self.ptr.as_ptr() as *mut u8, layout);
             }
         }
     }
