@@ -203,7 +203,7 @@ macro_rules! global_once {
 macro_rules! single {
     ($($name:ident: $type:ty = $init:expr);+ $(;)?) => {
         $(
-            static $name: $crate::kernel_components::structures::Single<$type> = $crate::kernel_components::structures::Single::new(|| $init);
+            pub static $name: $crate::kernel_components::structures::Single<$type> = $crate::kernel_components::structures::Single::new(|| $init);
         )+
     };
 }
