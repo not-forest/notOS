@@ -144,8 +144,13 @@ impl<'a> InfoPointer<'a> {
     }
 }
 
+/// Returns the page address in memory where some item is located.
+pub fn address_of<T>(item: &T) -> usize {
+    item as *const T as usize
+}
+
 /// Remaps sections of kernel.
-pub fn remap_kernel<A>(allocator: &mut A, boot_info: &InfoPointer) 
+pub fn remap_kernel<A>(allocator: &mut A, boot_info: &InfoPointer) -> ActivePageTable
     where A: FrameAlloc
 {
     use crate::Color;
@@ -224,6 +229,67 @@ pub fn remap_kernel<A>(allocator: &mut A, boot_info: &InfoPointer)
 
     active_table.unmap(old_p4_page, allocator);
     println!(Color::LIGHTGRAY; "Guard page at {:#x}", old_p4_page.start_address());
+
+    active_table
+}
+
+/// Creates a new frame allocator based on kernel multiboot start/end, remaps the kernel and
+/// creates a guard page. Initiates a stack and a heap.
+/// 
+/// # Note
+/// 
+/// This function only does memory based operations without changing states of any register or
+/// global state. Any specific properties of registers related to memory must be set manually
+/// via kernel_components::registers::control.
+pub fn init(boot_info: &InfoPointer) {
+    use crate::{
+        println,
+        kernel_components::{
+            memory::{
+                InfoPointer, BootInfoHeader, 
+                AreaFrameAllocator, EntryFlags::WRITABLE,
+                self,
+
+                allocators::bump_alloc::{BUMP_ALLOC_HEAP_START, BUMP_ALLOC_HEAP_ARENA},
+                paging::Page,
+            },
+            registers::control,
+        },            
+        Color,
+    };
+
+    let memory_map_tag = boot_info.memory_map_tag()
+        .expect("Memory map tag required.");
+
+    let kernel_start = boot_info.kstart();
+    let kernel_end = boot_info.kend();
+    let multiboot_start = boot_info.mstart();
+    let multiboot_end = boot_info.mend();
+    let heap_start = BUMP_ALLOC_HEAP_START;
+    let heap_end = BUMP_ALLOC_HEAP_START + BUMP_ALLOC_HEAP_ARENA;
+
+    let mut frame_allocator = AreaFrameAllocator::new(
+        kernel_start as usize, 
+        kernel_end as usize, 
+        multiboot_start, 
+        multiboot_end,
+        memory_map_tag.memory_map_iter(),
+    );
+
+    println!("Remapping start");
+    // remaping the kernel
+    let mut active_table = memory::remap_kernel(&mut frame_allocator, &boot_info);
+    println!("Remapping complete!");
+
+    let heap_start_page = Page::containing_address(heap_start);
+    let heap_end_page = Page::containing_address(heap_end);
+
+    println!("Mapping the heap pages.");
+    for page in Page::range_inclusive(heap_start_page, heap_end_page) {
+        active_table.map(page, WRITABLE, &mut frame_allocator);
+        println!(Color::LIGHTGRAY; "Mapping page at address {:#x}", page.start_address());
+    } 
+    println!("Mapping complete.");
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
