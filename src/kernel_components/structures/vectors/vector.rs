@@ -7,7 +7,6 @@ use core::alloc::{Layout, GlobalAlloc};
 use core::ops::{Deref, DerefMut};
 
 use crate::AsBytes;
-use crate::kernel_components::memory::global_alloc::{GAllocator, GLOBAL_ALLOCATOR};
 use super::raw_vector::RawVec;
 
 /// Fully working vector implementation that allocates on the global heap..
