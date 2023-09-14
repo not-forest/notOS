@@ -30,6 +30,7 @@ impl Frame {
     }
 }
 
+/// Iterator over frames.
 pub struct FrameIter {
     start: Frame,
     end: Frame,
