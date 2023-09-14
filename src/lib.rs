@@ -2,7 +2,7 @@
 #![no_std]
 #![cfg_attr(test, no_main)]
 #![allow(incomplete_features, unused, non_snake_case)]
-#![feature(custom_test_frameworks, used_with_arg, error_in_core, ptr_metadata, generic_const_exprs)]
+#![feature(custom_test_frameworks, used_with_arg, error_in_core, ptr_metadata, generic_const_exprs, allocator_api, slice_ptr_get)]
 #![test_runner(crate::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
@@ -39,7 +39,6 @@
 /// Main entry point for outer structures and objects
 pub mod kernel_components {
     pub mod vga_buffer;
-    pub mod error;
 
     pub mod structures {
         pub mod single;
@@ -88,7 +87,15 @@ pub mod kernel_components {
     }
 
     pub mod memory {
-        pub mod global_alloc;
+        
+        pub mod allocators {
+            pub mod global_alloc;
+            pub mod bump_alloc;
+
+            pub use global_alloc::{GAllocator, GLOBAL_ALLOCATOR};
+            pub use bump_alloc::{BumpAlloc, BUMP_ALLOC};
+        }
+
         pub mod memory_module;
         pub mod memory_map;
         pub mod sections;
@@ -100,7 +107,7 @@ pub mod kernel_components {
         pub mod temporary_pages;
         pub mod inactive_tables;
 
-        pub use memory_module::{InfoPointer, BootInfoHeader, remap_kernel};
+        pub use memory_module::{InfoPointer, BootInfoHeader, init, remap_kernel};
         pub use frames::AreaFrameAllocator;
         
         pub use paging::{Page, Table, Entry, EntryFlags};
@@ -133,7 +140,6 @@ pub use kernel_components::{
     },
 
     vga_buffer::Color,
-    error::*,
 };
 
 /// This function will be called on fatal errors in the system.
