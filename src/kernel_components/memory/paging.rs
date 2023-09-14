@@ -56,7 +56,7 @@ impl HierarchicalLevel for Level2 {
 }
 
 /// A representation of a single page. It is just like a Frame, but virtual.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Page {
     num: usize
 }
@@ -76,6 +76,10 @@ impl Page {
         self.num * PAGE_SIZE
     }
 
+    pub fn range_inclusive(start: Page, end: Page) -> PageIter {
+        PageIter { start, end }
+    }
+
     pub(crate) fn p4_index(&self) -> usize {
         (self.num >> 27) & 0o777
     }
@@ -87,6 +91,25 @@ impl Page {
     }
     pub(crate) fn p1_index(&self) -> usize {
         (self.num >> 0) & 0o777
+    }
+}
+
+/// Iterator over pages.
+pub struct PageIter {
+    start: Page,
+    end: Page,
+}
+
+impl Iterator for PageIter {
+    type Item = Page;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.start <= self.end {
+            let page = self.start.clone();
+            self.start.num += 1;
+            Some(page)
+        } else {
+            None
+        }
     }
 }
 
