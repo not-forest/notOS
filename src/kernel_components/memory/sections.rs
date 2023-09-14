@@ -6,7 +6,6 @@ use core::marker::PhantomData;
 use core::mem;
 use core::str::Utf8Error;
 use core::ops::{Deref, DerefMut};
-use core::ptr::Pointee;
 
 use proc_macros::Iternum;
 use crate::{Vec, AsBytes, bitflags};
