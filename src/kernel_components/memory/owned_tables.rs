@@ -10,7 +10,7 @@ use super::{
     inactive_tables::InactivePageTable, 
     temporary_pages::TempPage,
 };
-use crate::{VirtualAddress, PhysicalAddress};
+use crate::{VirtualAddress, PhysicalAddress, println};
 use crate::kernel_components::instructions::TLB;
 use core::ptr::NonNull;
 use core::ops::{Deref, DerefMut};
@@ -172,7 +172,7 @@ impl InnerMapper {
         let mut p1 = p2.next_table_create(page.p2_index(), allocator);
         
         if !p1[page.p1_index()].is_unused() {
-            panic!("The page must be unused.\nReceived page {page:?} with address: {:#x} that is currently used.", page.start_address());
+            crate::warn!("WARNING! The page must be unused.\nReceived page {:?} with address: {:#x} that is currently used.", page, page.start_address());
         }
         
         p1[page.p1_index()].set(frame, flags | PRESENT);
