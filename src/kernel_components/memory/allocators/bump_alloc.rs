@@ -7,7 +7,7 @@
 use crate::single;
 use core::alloc::{Allocator, Layout, GlobalAlloc, AllocError};
 use core::borrow::BorrowMut;
-use core::mem::size_of;
+use core::mem;
 use core::ptr::{NonNull, self};
 use core::sync::atomic::{AtomicUsize, Ordering};
 
@@ -145,7 +145,8 @@ unsafe impl Allocator for BumpAlloc {
                         continue
                     }
                 }
-
+                //use crate::println;
+                //println!("Allocating {} bytes at {:#x}", layout.size(), current_next_ptr);
                 if let Ok(cas_current_next) = self.next_ptr.compare_exchange(
                     current_next_ptr,
                     end_alloc,
@@ -184,14 +185,18 @@ unsafe impl Allocator for BumpAlloc {
     /// an object, they will first check if it is possible to fit that hole.
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
         // Check is the hole struct will fit in deallocated place.
-        if size_of::<BumpHole>() > layout.size() {
+        if mem::size_of::<BumpHole>() > layout.size() {
+            //use crate::println;
+            //println!("Ignoring the deallocation, because size is too small: {}", layout.size());
             return
         }
+
         // Memory address of deallocation area.
         let start_dealloc = (ptr.as_ptr() as usize);
+
         // Setting the memory hole struct into the hole.
         BumpHole::set_hole(
-            start_dealloc as *mut BumpHole, 
+            start_dealloc, 
             self.next_ptr.load(Ordering::Relaxed),
             layout.size()
         );
@@ -222,6 +227,9 @@ unsafe impl Allocator for BumpAlloc {
                 // first and changed the next_ptr. This thread must retry again. 
                 continue
             }
+            //use crate::println;
+            //println!("Deallocating {} bytes from {:#x}", layout.size(), start_dealloc);
+
             break
         }
     }
@@ -232,6 +240,7 @@ unsafe impl Allocator for BumpAlloc {
 /// 
 /// If the new allocated memory is not enough to fir this hole, bump allocator will try to fit it in the
 /// location of this pointer. 
+#[repr(C)]
 struct BumpHole {
     size: usize,
     ptr: usize,
@@ -239,10 +248,11 @@ struct BumpHole {
 
 impl BumpHole {
     /// Marks the empty place with a hole
-    fn set_hole(hole_ptr: *mut BumpHole, prev_ptr: usize, hole_size: usize) {
+    fn set_hole(hole_ptr: usize, prev_ptr: usize, hole_size: usize) {
         let hole = BumpHole { size: hole_size, ptr: prev_ptr };
+
         unsafe {
-            ptr::write(hole_ptr, hole);
+            ptr::write_unaligned(hole_ptr as *mut BumpHole, hole);
         }
     }
 
