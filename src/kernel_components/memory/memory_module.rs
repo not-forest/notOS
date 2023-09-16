@@ -196,7 +196,9 @@ pub fn remap_kernel<A>(allocator: &mut A, boot_info: &InfoPointer) -> ActivePage
                         section.get().flags());
             }
 
-            println!(Color::LIGHTGREEN; "Mapping section at addr: {:#x}, size: {:#x}", section.start_address(), section.size());
+            #[cfg(debug_assertions)] {
+                println!(Color::LIGHTGREEN; "Mapping section at addr: {:#x}, size: {:#x}", section.start_address(), section.size());
+            }
             
             let flags = EntryFlags::from_elf_section_flags(&section);
 
@@ -228,7 +230,9 @@ pub fn remap_kernel<A>(allocator: &mut A, boot_info: &InfoPointer) -> ActivePage
     );
 
     active_table.unmap(old_p4_page, allocator);
-    println!(Color::LIGHTGRAY; "Guard page at {:#x}", old_p4_page.start_address());
+    #[cfg(debug_assertions)] {
+        println!(Color::LIGHTGRAY; "Guard page at {:#x}", old_p4_page.start_address());
+    }
 
     active_table
 }
@@ -275,21 +279,28 @@ pub fn init(boot_info: &InfoPointer) {
         multiboot_end,
         memory_map_tag.memory_map_iter(),
     );
-
-    println!("Remapping start");
+    #[cfg(debug_assertions)] {
+        println!("Remapping start");
+    }
     // remaping the kernel
     let mut active_table = memory::remap_kernel(&mut frame_allocator, &boot_info);
-    println!("Remapping complete!");
+    #[cfg(debug_assertions)] {
+        println!("Remapping complete!");
+    }
 
     let heap_start_page = Page::containing_address(heap_start);
     let heap_end_page = Page::containing_address(heap_end);
 
-    println!("Mapping the heap pages.");
+    #[cfg(debug_assertions)] {
+        println!("Mapping the heap pages.");
+    }
     for page in Page::range_inclusive(heap_start_page, heap_end_page) {
         active_table.map(page, WRITABLE, &mut frame_allocator);
         println!(Color::LIGHTGRAY; "Mapping page at address {:#x}", page.start_address());
     } 
-    println!("Mapping complete.");
+    #[cfg(debug_assertions)] {
+        println!("Mapping complete.");
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
