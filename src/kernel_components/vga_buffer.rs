@@ -198,13 +198,13 @@ macro_rules! move_cursor {
 macro_rules! print {
     ($fr:expr; $($arg:tt)*) => {
         $crate::kernel_components::vga_buffer::_coloring($fr, None);
-        print!($($arg)*);
-        $crate::kernel_components::vga_buffer::_coloring(crate::Color::WHITE, Some(crate::Color::BLACK));
+        $crate::print!($($arg)*);
+        $crate::kernel_components::vga_buffer::_coloring($crate::Color::WHITE, Some($crate::Color::BLACK));
     };
     ($fr:expr; $bg:expr; $($arg:tt)*) => {
         $crate::kernel_components::vga_buffer::_coloring($fr, Some($bg));
-        print!($($arg)*);
-        $crate::kernel_components::vga_buffer::_coloring(crate::Color::WHITE, Some(crate::Color::BLACK));
+        $crate!($($arg)*);
+        $crate::kernel_components::vga_buffer::_coloring($crate::Color::WHITE, Some($crate::Color::BLACK));
     };
     ($($arg:tt)*) => ($crate::kernel_components::vga_buffer::_print(format_args!($($arg)*)));
 }
@@ -231,30 +231,37 @@ macro_rules! print {
 /// '''
 #[macro_export]
 macro_rules! println {
-    () => (crate::print!('\n'));
-    ($fmt:expr) => (crate::print!(concat!($fmt, '\n')));
-    ($fmt:expr, $($arg:tt)*) => (crate::print!(concat!($fmt, '\n'), $($arg)*));
+    () => ($crate::print!('\n'));
+    ($fmt:expr) => ($crate::print!(concat!($fmt, '\n')));
+    ($fmt:expr, $($arg:tt)*) => ($crate::print!(concat!($fmt, '\n'), $($arg)*));
     
     ($fr:expr; $fmt:expr) => {
         $crate::kernel_components::vga_buffer::_coloring($fr, None);
         println!($fmt);
-        $crate::kernel_components::vga_buffer::_coloring(crate::Color::WHITE, Some(crate::Color::BLACK));
+        $crate::kernel_components::vga_buffer::_coloring($crate::Color::WHITE, Some($crate::Color::BLACK));
     };
     ($fr:expr; $bg:expr; $fmt:expr) => {
         $crate::kernel_components::vga_buffer::_coloring($fr, Some($bg));
         println!($fmt);
-        $crate::kernel_components::vga_buffer::_coloring(crate::Color::WHITE, Some(crate::Color::BLACK));
+        $crate::kernel_components::vga_buffer::_coloring($crate::Color::WHITE, Some($crate::Color::BLACK));
     };
     ($fr:expr; $fmt:expr, $($arg:tt)*) => {
         $crate::kernel_components::vga_buffer::_coloring($fr, None);
         println!($fmt, $($arg)*);
-        $crate::kernel_components::vga_buffer::_coloring(crate::Color::WHITE, Some(crate::Color::BLACK));
+        $crate::kernel_components::vga_buffer::_coloring($crate::Color::WHITE, Some($crate::Color::BLACK));
     };
     ($fr:expr; $bg:expr; $fmt:expr, $($arg:tt)*) => {
         $crate::kernel_components::vga_buffer::_coloring($fr, Some($bg));
         println!($fmt, $($arg)*);
-        $crate::kernel_components::vga_buffer::_coloring(crate::Color::WHITE, Some(crate::Color::BLACK));
+        $crate::kernel_components::vga_buffer::_coloring($crate::Color::WHITE, Some($crate::Color::BLACK));
     };
+}
+
+#[macro_export]
+macro_rules! warn {
+    () => (crate::print!('\n'));
+    ($fmt:expr) => ($crate::print!(crate::Color::YELLOW; concat!("WANRING! " ,$fmt, '\n')));
+    ($fmt:expr, $($arg:tt)*) => (crate::print!(crate::Color::YELLOW; concat!("WANRING! ", $fmt, '\n'), $($arg)*));
 }
 
 #[doc(hidden)]
