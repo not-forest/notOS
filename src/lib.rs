@@ -90,9 +90,11 @@ pub mod kernel_components {
         
         pub mod allocators {
             pub mod global_alloc;
+            pub mod leak_alloc;
             pub mod bump_alloc;
 
             pub use global_alloc::{GAllocator, GLOBAL_ALLOCATOR};
+            pub use leak_alloc::{LeakAlloc, LEAK_ALLOC};
             pub use bump_alloc::{BumpAlloc, BUMP_ALLOC};
         }
 
