@@ -20,7 +20,7 @@ static HEADER_START_FUNC: unsafe extern "C" fn() = header_start;
 static HEADER_END_FUNC: unsafe extern "C" fn() = header_end;
 
 /// This is the main binary (kernel) space. As the library will build in, more new features will be added further.
-use notOS::{println, print, kernel_components::{memory::{self, memory_module::{InfoPointer, BootInfoHeader}}, registers::control}, Color};
+use notOS::{print, warn, kernel_components::{memory::{self, memory_module::{InfoPointer, BootInfoHeader}}, registers::control}, Color};
 
 #[no_mangle]
 pub extern "C" fn _start(_multiboot_information_address: usize) {
@@ -29,14 +29,19 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
     #[cfg(test)]
     test_main();
     
-    // This part will only be compiled during debugging.
-    #[cfg(debug_assertions)] {
+    // Memory initialization.
+    {
         let boot_info = unsafe { InfoPointer::load(_multiboot_information_address as *const BootInfoHeader ) }.unwrap();
         
         control::Cr0::enable_write_protect_bit();
 
         memory::init(&boot_info);
-    }   
+    }
+
+    // This part will only be compiled during debugging.
+    #[cfg(debug_assertions)] {
+        warn!("DEBUG MODE ON!");
+    }
 
     main();
 }
@@ -45,21 +50,23 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
 fn main() -> ! {
     use notOS::Vec;
     
-    println!(Color::BLUE; "Hello stack and heap memory!");
-    println!("Lets allocate something.");
+    {
+        let mut vector = Vec::new();
+        let text = "!god yzal eht revo spmuj xof nworb kciuq A";
 
-    let mut vector: Vec<usize> = Vec::new();
+        for w in text.chars() {
+            vector.push(w);
+        }
 
-    for i in 0..8000 {
-        vector.push(i);
+        while vector.len() > 0 {
+            print!(Color::CYAN; "{}", vector.pop().unwrap());
+        }
     }
 
-    println!("The vector has {} elements.", vector.len);
+    let vector = Vec::from_array(&[1, 2, 4, 5, 6, 7, 10]);
 
-    println!(Color::DARKGRAY; "Time to overflow the heap!.");
-
-    for i in 0.. {
-        vector.push(i);
+    for i in vector {
+        print!(" {}", i);
     }
 
     loop {}
