@@ -6,7 +6,6 @@
 /// object within the chunk.
 use crate::single;
 use core::alloc::{Allocator, Layout, GlobalAlloc, AllocError};
-use core::borrow::BorrowMut;
 use core::mem;
 use core::ptr::{NonNull, self};
 use core::sync::atomic::{AtomicUsize, Ordering};
@@ -78,12 +77,12 @@ impl BumpAlloc {
         }
     }
 
-    /// Returns the address of the first node as usize
+    /// Returns the address of the first ptr as usize
     pub fn start_ptr_addr(&self) -> usize {
         self.start_ptr.as_ptr() as usize
     }
     
-    /// Returns the address of the last node as usize
+    /// Returns the address of the last ptr as usize
     pub fn end_ptr_addr(&self) -> usize {
         self.end_ptr.as_ptr() as usize
     }
@@ -145,8 +144,10 @@ unsafe impl Allocator for BumpAlloc {
                         continue
                     }
                 }
-                //use crate::println;
-                //println!("Allocating {} bytes at {:#x}", layout.size(), current_next_ptr);
+                #[cfg(debug_assertions)] {
+                    use crate::println;
+                    println!("Allocating {} bytes at {:#x}", layout.size(), current_next_ptr);
+                }
                 if let Ok(cas_current_next) = self.next_ptr.compare_exchange(
                     current_next_ptr,
                     end_alloc,
@@ -186,8 +187,10 @@ unsafe impl Allocator for BumpAlloc {
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
         // Check is the hole struct will fit in deallocated place.
         if mem::size_of::<BumpHole>() > layout.size() {
-            //use crate::println;
-            //println!("Ignoring the deallocation, because size is too small: {}", layout.size());
+            #[cfg(debug_assertions)] {
+                use crate::println;
+                println!("Ignoring the deallocation, because size is too small: {}", layout.size());
+            }
             return
         }
 
@@ -227,8 +230,10 @@ unsafe impl Allocator for BumpAlloc {
                 // first and changed the next_ptr. This thread must retry again. 
                 continue
             }
-            //use crate::println;
-            //println!("Deallocating {} bytes from {:#x}", layout.size(), start_dealloc);
+            #[cfg(debug_assertions)] {
+                use crate::println;
+                println!("Deallocating {} bytes from {:#x}", layout.size(), start_dealloc);
+            }
 
             break
         }
