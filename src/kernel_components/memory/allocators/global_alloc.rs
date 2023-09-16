@@ -12,12 +12,11 @@ use core::alloc::{GlobalAlloc, Layout, Allocator};
 use core::cell::UnsafeCell;
 use core::ptr::{null_mut, NonNull};
 
+use super::*;
 use core::sync::atomic::{
     AtomicUsize,
     Ordering::SeqCst,
 };
-
-use super::BUMP_ALLOC;
 
 /// Maximal size of the whole arena.
 const ARENA_SIZE: usize = 128 * 1024;
