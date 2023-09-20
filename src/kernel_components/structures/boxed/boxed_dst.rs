@@ -27,7 +27,7 @@ impl<T: TagTrait<Metadata = usize> + ?Sized> BoxedDst<T> {
         let tag_size = size_of::<TagTypeId>() + size_of::<u32>() + content.len();
         let alloc_size = (tag_size + 7) & !7;
         let layout = Layout::from_size_align(alloc_size, ALIGN).unwrap();
-        let ptr = unsafe { GlobalAlloc::alloc(&GLOBAL_ALLOCATOR, layout) };
+        let ptr = unsafe { GLOBAL_ALLOCATOR.alloc(layout) };
         assert!(!ptr.is_null());
 
         unsafe {
@@ -60,7 +60,7 @@ impl<T: TagTrait<Metadata = usize> + ?Sized> BoxedDst<T> {
 
 impl<T: ?Sized> Drop for BoxedDst<T> {
     fn drop(&mut self) {
-        unsafe { GlobalAlloc::dealloc(&GLOBAL_ALLOCATOR, self.ptr.as_ptr().cast(), self.layout) }
+        unsafe { GLOBAL_ALLOCATOR.dealloc(self.ptr.as_ptr().cast(), self.layout) }
     }
 }
 
