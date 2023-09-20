@@ -254,7 +254,7 @@ pub fn init(boot_info: &InfoPointer) {
                 AreaFrameAllocator, EntryFlags::WRITABLE,
                 self,
 
-                allocators::bump_alloc::{BUMP_ALLOC_HEAP_START, BUMP_ALLOC_HEAP_ARENA},
+                allocators::GLOBAL_ALLOCATOR,
                 paging::Page,
             },
             registers::control,
@@ -269,8 +269,8 @@ pub fn init(boot_info: &InfoPointer) {
     let kernel_end = boot_info.kend();
     let multiboot_start = boot_info.mstart();
     let multiboot_end = boot_info.mend();
-    let heap_start = BUMP_ALLOC_HEAP_START;
-    let heap_end = BUMP_ALLOC_HEAP_START + BUMP_ALLOC_HEAP_ARENA;
+    let heap_start = unsafe { GLOBAL_ALLOCATOR.heap_addr };
+    let heap_end = heap_start + unsafe{ GLOBAL_ALLOCATOR.arena_size };
 
     let mut frame_allocator = AreaFrameAllocator::new(
         kernel_start as usize, 
@@ -279,28 +279,23 @@ pub fn init(boot_info: &InfoPointer) {
         multiboot_end,
         memory_map_tag.memory_map_iter(),
     );
-    #[cfg(debug_assertions)] {
-        println!("Remapping start");
-    }
+
+    #[cfg(debug_assertions)] { println!("Remapping start"); }
+    
     // remaping the kernel
     let mut active_table = memory::remap_kernel(&mut frame_allocator, &boot_info);
-    #[cfg(debug_assertions)] {
-        println!("Remapping complete!");
-    }
+    #[cfg(debug_assertions)] { println!("Remapping complete!"); }
 
     let heap_start_page = Page::containing_address(heap_start);
     let heap_end_page = Page::containing_address(heap_end);
 
-    #[cfg(debug_assertions)] {
-        println!("Mapping the heap pages.");
-    }
+    #[cfg(debug_assertions)] { println!("Mapping the heap pages."); }
+
     for page in Page::range_inclusive(heap_start_page, heap_end_page) {
         active_table.map(page, WRITABLE, &mut frame_allocator);
         println!(Color::LIGHTGRAY; "Mapping page at address {:#x}", page.start_address());
     } 
-    #[cfg(debug_assertions)] {
-        println!("Mapping complete.");
-    }
+    #[cfg(debug_assertions)] { println!("Mapping complete."); }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
