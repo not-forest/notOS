@@ -2,7 +2,8 @@
 #![no_std]
 #![cfg_attr(test, no_main)]
 #![allow(incomplete_features, unused, non_snake_case)]
-#![feature(custom_test_frameworks, used_with_arg, error_in_core, ptr_metadata, generic_const_exprs, allocator_api, slice_ptr_get)]
+#![feature(custom_test_frameworks, used_with_arg, error_in_core, ptr_metadata, 
+        generic_const_exprs, allocator_api, slice_ptr_get, maybe_uninit_array_assume_init)]
 #![test_runner(crate::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
@@ -92,10 +93,12 @@ pub mod kernel_components {
             pub mod global_alloc;
             pub mod leak_alloc;
             pub mod bump_alloc;
+            pub mod node_alloc;
 
-            pub use global_alloc::{GAllocator, GLOBAL_ALLOCATOR};
+            pub use global_alloc::{GAllocator, SubAllocator, GLOBAL_ALLOCATOR};
             pub use leak_alloc::{LeakAlloc, LEAK_ALLOC};
             pub use bump_alloc::{BumpAlloc, BUMP_ALLOC};
+            pub use node_alloc::{NodeAlloc, NODE_ALLOC};
         }
 
         pub mod memory_module;
@@ -139,6 +142,10 @@ pub use kernel_components::{
     structures::{
         bytes::{Bytes, AsBytes},
         vectors::Vec
+    },
+
+    memory::{
+        allocators::{GLOBAL_ALLOCATOR, LEAK_ALLOC, BUMP_ALLOC, NODE_ALLOC},
     },
 
     vga_buffer::Color,
