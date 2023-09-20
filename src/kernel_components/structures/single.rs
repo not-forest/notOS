@@ -199,13 +199,37 @@ macro_rules! global_once {
 /// The `single!` macro generates static instances of the `Single` structure
 /// for each provided name and type, initializing them with the specified
 /// initialization function.
+/// 
+/// # Mutability
+/// 
+/// If the item will be marked as mutable, every single mutable operation on it
+/// must be marked in unsafe block. It is not recommended to use mutable statics,
+/// therefore it must only be used if some thread safety are implemented inside the
+/// item. If no thread safety is implemented nor the item will never be shared between
+/// threads, it is better to wrap the static around mutex or other synchronization primitive.
 #[macro_export]
 macro_rules! single {
     ($($name:ident: $type:ty = $init:expr);+ $(;)?) => {
         $(
+            static $name: $crate::kernel_components::structures::Single<$type> = $crate::kernel_components::structures::Single::new(|| $init);
+        )+
+    };
+    ($(pub $name:ident: $type:ty = $init:expr);+ $(;)?) => {
+        $(
             pub static $name: $crate::kernel_components::structures::Single<$type> = $crate::kernel_components::structures::Single::new(|| $init);
         )+
     };
+    ($(mut $name:ident: $type:ty = $init:expr);+ $(;)?) => {
+        $(
+            pub static mut $name: $crate::kernel_components::structures::Single<$type> = $crate::kernel_components::structures::Single::new(|| $init);
+        )+
+    };
+    ($(pub mut $name:ident: $type:ty = $init:expr);+ $(;)?) => {
+        $(
+            pub static mut $name: $crate::kernel_components::structures::Single<$type> = $crate::kernel_components::structures::Single::new(|| $init);
+        )+
+    };
+    () => ();
 }
 
 
