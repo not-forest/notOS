@@ -7,8 +7,15 @@
 /// Use this allocator only when you are completely sure, that the DST's will always
 /// live during the whole OS session or that the amount of those DST's wont cross the
 /// size limit of allocator's arena.
+/// 
+/// # Scale
+/// 
+/// The size of heap arena is the same as the given at compile time. No growing methods
+/// exists to make it bigger or shrink it. Do additional stack space or inner heap space
+/// is used at runtime.
  
 use crate::single;
+use super::SubAllocator;
 use core::alloc::{Allocator, Layout, GlobalAlloc, AllocError};
 use core::ptr::NonNull;
 use core::sync::atomic::{AtomicUsize, Ordering};
@@ -20,7 +27,7 @@ pub const LEAK_ALLOC_HEAP_ARENA: usize = 128 * 1024;
 
 /// Static default allocator instance
 single! {
-    LEAK_ALLOC: LeakAlloc = LeakAlloc::new(
+    pub LEAK_ALLOC: LeakAlloc = LeakAlloc::new(
         LEAK_ALLOC_HEAP_START,
         LEAK_ALLOC_HEAP_START + LEAK_ALLOC_HEAP_ARENA,
     );
@@ -51,6 +58,7 @@ single! {
 /// # Thread safety
 /// 
 /// Allocation is thread safe, and uses lock-free algorithm to deal with memory regions.
+#[derive(Debug)]
 pub struct LeakAlloc {
     // The start of the heap
     start_ptr: NonNull<u8>,
@@ -108,8 +116,7 @@ unsafe impl Allocator for LeakAlloc {
 
             if end_alloc <= self.end_ptr_addr() {
                 #[cfg(debug_assertions)] {
-                    use crate::println;
-                    println!("Allocating {} bytes at {:#x}", layout.size(), current_next_ptr);
+                    crate::println!("Allocating {} bytes at {:#x}", layout.size(), current_next_ptr);
                 }
                 if let Ok(cas_current_next) = self.next_ptr.compare_exchange(
                     current_next_ptr,
@@ -131,5 +138,15 @@ unsafe impl Allocator for LeakAlloc {
     /// Leak allocator cannot deallocate anything.
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
         // Leak memory
+    }
+}
+
+impl SubAllocator for LeakAlloc {
+    fn arena_size(&self) -> usize {
+        LEAK_ALLOC_HEAP_ARENA
+    }
+
+    fn heap_addr(&self) -> usize {
+        LEAK_ALLOC_HEAP_START
     }
 }
