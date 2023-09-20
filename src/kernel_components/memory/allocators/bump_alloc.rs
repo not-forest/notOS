@@ -4,7 +4,15 @@
 /// in the chunk, and then, assuming we have enough room, we move the bump pointer over by 
 /// the size of object bytes and return the pointer to the space we just reserved for the 
 /// object within the chunk.
+/// 
+/// # Scale
+/// 
+/// The size of heap arena is the same as the given at compile time. No growing methods
+/// exists to make it bigger or shrink it. Do additional stack space or inner heap space
+/// is used at runtime. Holes that are left without deallocation will be a result of external 
+/// fragmentation.
 use crate::single;
+use super::SubAllocator;
 use core::alloc::{Allocator, Layout, GlobalAlloc, AllocError};
 use core::mem;
 use core::ptr::{NonNull, self};
@@ -17,7 +25,7 @@ pub const BUMP_ALLOC_HEAP_ARENA: usize = 128 * 1024;
 
 /// Static default allocator instance
 single! {
-    BUMP_ALLOC: BumpAlloc = BumpAlloc::new(
+    pub BUMP_ALLOC: BumpAlloc = BumpAlloc::new(
         BUMP_ALLOC_HEAP_START,
         BUMP_ALLOC_HEAP_START + BUMP_ALLOC_HEAP_ARENA,
     );
@@ -52,6 +60,7 @@ single! {
 /// 
 /// Bump allocators are typically not thread-safe. This one however uses a lock-free algorithms when allocating
 /// and deallocating memory. More info in allocate(), deallocate() methods.
+#[derive(Debug)]
 pub struct BumpAlloc {
     // The start of the heap
     start_ptr: NonNull<u8>,
@@ -126,11 +135,11 @@ unsafe impl Allocator for BumpAlloc {
                                 Ordering::SeqCst,
                                 Ordering::Relaxed,
                             );
-                            continue
                         } else {
                             end_alloc = hole.ptr;
-                            hole.delete();
                         }
+                        
+                        hole.delete();
                     }
 
                     if let Err(cas_old_temp) = self.temp_ptr.compare_exchange(
@@ -144,9 +153,9 @@ unsafe impl Allocator for BumpAlloc {
                         continue
                     }
                 }
+
                 #[cfg(debug_assertions)] {
-                    use crate::println;
-                    println!("Allocating {} bytes at {:#x}", layout.size(), current_next_ptr);
+                    crate::println!("Allocating {} bytes at {:#x}", layout.size(), current_next_ptr);
                 }
                 if let Ok(cas_current_next) = self.next_ptr.compare_exchange(
                     current_next_ptr,
@@ -188,8 +197,7 @@ unsafe impl Allocator for BumpAlloc {
         // Check is the hole struct will fit in deallocated place.
         if mem::size_of::<BumpHole>() > layout.size() {
             #[cfg(debug_assertions)] {
-                use crate::println;
-                println!("Ignoring the deallocation, because size is too small: {}", layout.size());
+                crate::println!("Ignoring the deallocation, because size is too small: {}", layout.size());
             }
             return
         }
@@ -231,12 +239,21 @@ unsafe impl Allocator for BumpAlloc {
                 continue
             }
             #[cfg(debug_assertions)] {
-                use crate::println;
-                println!("Deallocating {} bytes from {:#x}", layout.size(), start_dealloc);
+                crate::println!("Deallocating {} bytes from {:#x}", layout.size(), start_dealloc);
             }
 
             break
         }
+    }
+}
+
+impl SubAllocator for BumpAlloc {
+    fn arena_size(&self) -> usize {
+        BUMP_ALLOC_HEAP_ARENA
+    }
+
+    fn heap_addr(&self) -> usize {
+        BUMP_ALLOC_HEAP_START
     }
 }
 
