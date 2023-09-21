@@ -141,7 +141,8 @@ pub use kernel_components::{
     
     structures::{
         bytes::{Bytes, AsBytes},
-        vectors::Vec
+        vectors::Vec,
+        boxed::BoxedDst,
     },
 
     memory::{
