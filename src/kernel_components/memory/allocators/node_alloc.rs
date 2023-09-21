@@ -50,7 +50,7 @@ pub const NODE_ALLOC_HEAP_ARENA: usize = NODE_AMOUNT * NODE_SIZE;
 const NODE_AMOUNT: usize = 128;
 /// The size of a single node. When smaller number is used, the external fragmentation is getting less frequent, but the
 /// overall performance, will decrease.
-const NODE_SIZE: usize = 4;
+const NODE_SIZE: usize = 8;
 
 /// Static default allocator instance
 single! {
