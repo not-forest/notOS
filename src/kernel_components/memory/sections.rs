@@ -42,7 +42,7 @@ impl SectionsTag {
         ]);
         bytes.push(sections.into());
 
-        BoxedDst::new(bytes.as_bytes().into())
+        BoxedDst::new_tag_dst(bytes.as_bytes().into())
     }
 
     /// Returns an iterator of loaded ELF sections.

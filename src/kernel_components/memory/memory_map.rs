@@ -45,7 +45,7 @@ impl MemoryMapTag {
             bytes.push(area.as_bytes());
         }
 
-        BoxedDst::new(bytes.as_bytes().into())
+        BoxedDst::new_tag_dst(bytes.as_bytes().into())
     }
 
     /// Returns the entry size.
