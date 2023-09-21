@@ -20,7 +20,7 @@ static HEADER_START_FUNC: unsafe extern "C" fn() = header_start;
 static HEADER_END_FUNC: unsafe extern "C" fn() = header_end;
 
 /// This is the main binary (kernel) space. As the library will build in, more new features will be added further.
-use notOS::{warn, kernel_components::{memory::{self, memory_module::{InfoPointer, BootInfoHeader}, allocators::SubAllocator}, registers::control}, Color, GLOBAL_ALLOCATOR, NODE_ALLOC};
+use notOS::{warn, kernel_components::{memory::{self, memory_module::{InfoPointer, BootInfoHeader}, allocators::SubAllocator}, registers::control}, Color, GLOBAL_ALLOCATOR, BUMP_ALLOC};
 
 #[no_mangle]
 pub extern "C" fn _start(_multiboot_information_address: usize) {
@@ -35,7 +35,7 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
         
         // The global allocator is a mutable static that do not use any locking 
         // algorithm, so any operation on it, is unsafe.
-        unsafe { GLOBAL_ALLOCATOR.r#use(&NODE_ALLOC) };
+        unsafe { GLOBAL_ALLOCATOR.r#use(&BUMP_ALLOC) };
         
         control::Cr0::enable_write_protect_bit();
         memory::init(&boot_info);
@@ -51,13 +51,15 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
 
 #[allow(dead_code, unreachable_code)]
 fn main() -> ! {
-    use notOS::Vec;
+    use notOS::BoxedDst;
+
+    #[derive(Debug)]
+    struct K {}
+
     {
-        let mut vector: Vec<u8> = Vec::new();
-    
-        for i in 0..30 {
-            vector.push(i);
-        }
+        let boxed = BoxedDst::new(K {});
+
+        notOS::println!("{:?}", *boxed);
     }
 
     loop {}
