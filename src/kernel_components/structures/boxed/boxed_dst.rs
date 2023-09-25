@@ -93,6 +93,34 @@ impl<T> BoxedDst<T> {
             _marker: PhantomData,
         }
     }
+
+    /// Allocates memory for uninitiated data type and returns a box with it.
+    /// 
+    /// Does the same as new(), except that it return the uninitiated data.
+    /// # Panics
+    /// 
+    /// If the provided data type, is a ZST, it does not allocate any memory and will
+    /// panic in the assertion.
+    pub fn new_uninit() -> BoxedDst<MaybeUninit<T>> {
+        let content_size = mem::size_of::<T>();
+
+        assert!(content_size != 0, "The size of provided data type must not be zero.");
+
+        let uninit_content = unsafe { MaybeUninit::uninit().assume_init() };
+        let content_align = mem::align_of::<T>();
+        let layout = Layout::from_size_align(content_size, content_align).unwrap();
+        let ptr = unsafe { GLOBAL_ALLOCATOR.alloc(layout) } as *mut MaybeUninit<T>;
+
+        unsafe {
+            ptr.write(uninit_content)
+        }
+
+        BoxedDst {
+            ptr: NonNull::new(ptr).unwrap(),
+            layout,
+            _marker: PhantomData,
+        }
+    }
 }
 
 impl<T: ?Sized> Drop for BoxedDst<T> {
