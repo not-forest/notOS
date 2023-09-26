@@ -62,6 +62,12 @@ pub mod kernel_components {
             pub use iterators::{IntoIter, Drain};
         }
 
+        pub mod thread_safe {
+            pub mod concurrent_list;
+
+            pub use concurrent_list::ConcurrentList;
+        }
+
         pub use bytes::{AsBytes, Bytes};
         pub use iternum::IternumTrait;
         pub use single::{Once, Single};
@@ -143,6 +149,8 @@ pub use kernel_components::{
         bytes::{Bytes, AsBytes},
         vectors::Vec,
         boxed::BoxedDst,
+        
+        thread_safe,
     },
 
     memory::{
