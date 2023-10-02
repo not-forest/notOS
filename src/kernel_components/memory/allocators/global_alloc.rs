@@ -65,6 +65,56 @@ impl GAllocator {
         self.arena_size = allocator.arena_size();
         self.allocator = &**allocator
     }
+
+    /// Updates the info about current allocator
+    /// 
+    /// Suitable for allocators that change their size or heap address via runtime.
+    /// 
+    /// # Note
+    /// 
+    /// This function call must be sequential consistent, because the update must be done
+    /// after the allocator's state changed. This function provides no locking algorithm or
+    /// info about unnecessary update. The function must be separated by some locking mechanism,
+    /// because it does two operations that must be atomic.
+    pub fn update(&mut self) {
+        self.heap_addr = self.allocator.heap_addr();
+        self.arena_size = self.allocator.arena_size();
+    }
+
+    /// Allocates memory with the specified layout, using some other allocator.
+    /// 
+    /// It is a handy way of allocating some special objects, that require another
+    /// allocation algorithm to work, or just use some special algorithm for some data
+    /// structure, that is faster for performance.
+    /// 
+    /// # Returns
+    /// 
+    /// Returns a pointer to the allocated memory block, or panics, if the pointer is null.
+    pub unsafe fn alloc_with<A>(&self, layout: Layout, allocator: A) -> *mut u8 where 
+        A: Allocator
+    {
+        match allocator.allocate(layout) {
+            Ok(address) => address.as_mut_ptr(),
+            Err(alloc_error) => panic!("Allocation error: {alloc_error}. Memory overflow.")
+        }
+    }
+
+    /// This function deallocates the memory region with the use of some custom allocator.
+    /// 
+    /// # Warn
+    /// 
+    /// You have to use it very wisely. Allocators are not working in the same way, therefore
+    /// you must deallocate the item with the use of the same allocator, that you have used
+    /// to allocate this object. You must use the same allocate-deallocate pair to remove the
+    /// object from the memory region in a right way.
+    pub unsafe fn dealloc_with<A>(&self, ptr: *mut u8, layout: Layout, allocator: A) where
+        A: Allocator
+    {
+        allocator.deallocate(
+            NonNull::new(ptr).unwrap(),
+            layout,
+        )
+    }
 }
 
 unsafe impl Sync for GAllocator {}
@@ -88,6 +138,16 @@ unsafe impl GlobalAlloc for GAllocator {
             NonNull::new(ptr).unwrap(),
             layout,
         )
+    }
+}
+
+unsafe impl Allocator for GAllocator {
+    fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, core::alloc::AllocError> {
+        self.allocator.allocate(layout)
+    }
+
+    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
+        self.allocator.deallocate(ptr, layout)
     }
 }
 
