@@ -11,7 +11,7 @@
 /// # Scale
 /// 
 /// The size of heap arena is the same as the given at compile time. No growing methods
-/// exists to make it bigger or shrink it. Do additional stack space or inner heap space
+/// exists to make it bigger or shrink it. No additional stack space or inner heap space
 /// is used at runtime.
  
 use crate::single;
