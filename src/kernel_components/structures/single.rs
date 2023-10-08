@@ -8,6 +8,7 @@
 
 use crate::kernel_components::sync::Mutex;
 use crate::{Vec, single};
+use core::fmt::Debug;
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::cell::{UnsafeCell, Cell};
 use core::ops::{Deref, DerefMut};
@@ -20,6 +21,12 @@ use core::ops::{Deref, DerefMut};
 pub struct Once<T> {
     initialized: AtomicBool,
     data: UnsafeCell<Option<T>>,
+}
+
+impl<T: Debug> Debug for Once<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{:?}", self.get())
+    }
 }
 
 impl<T> Once<T> {
@@ -163,6 +170,12 @@ impl<T> Deref for Single<T> {
 impl<T> DerefMut for Single<T> {
     fn deref_mut(&mut self) -> &mut T {
         &mut *self.data.force_mut(self.init.get().unwrap())
+    }
+}
+
+impl<T: Debug> Debug for Single<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{:?}", self.data)
     }
 }
 
