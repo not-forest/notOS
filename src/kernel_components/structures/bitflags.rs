@@ -221,35 +221,36 @@ macro_rules! _inner_bitflags {
                 Self::ALL
             }
             
+            pub const fn bits(&self) -> $underlying {
+                Self::enum_to_value(*self)
+            }
+
+            
             pub fn is_in(&self, bits: $underlying) -> bool {
                 self.as_node().is_in(bits)
             }
-
+            
             pub fn as_array() -> [Self; [$($name::$flag),*].len()] {
                 [$($name::$flag),*]
             }
-
-            pub fn bits(&self) -> $underlying {
-                <$underlying>::from(*self)
-            }
-
+            
             pub fn from_bits_truncate(bits: $underlying) -> crate::kernel_components::structures::BitNode<$underlying> {
                 ($name::Custom(bits) & Self::all()).into()
             }
-
+            
             pub fn as_node(&self) -> crate::kernel_components::structures::BitNode<$underlying> {
                 crate::kernel_components::structures::BitNode((*self as $name).into())
             }
-        }
 
-        impl From<$underlying> for $name {
-            fn from(value: $underlying) -> Self {
+            const fn node_to_enum(value: crate::kernel_components::structures::BitNode<$underlying>) -> $name {
+                $name::Custom(value.0)
+            }
+
+            const fn value_to_enum(value: $underlying) -> Self {
                 $name::Custom(value)
             }
-        }
 
-        impl From<$name> for $underlying {
-            fn from(value: $name) -> Self {
+            const fn enum_to_value(value: $name) -> $underlying {
                 match value {
                     $name::Custom(n) => n,
                     $name::ALL => <$underlying>::MAX,
@@ -261,6 +262,18 @@ macro_rules! _inner_bitflags {
                 }
             }
         }
+        
+        impl From<$underlying> for $name {
+            fn from(value: $underlying) -> Self {
+                $name::value_to_enum(value)
+            }
+        }
+
+        impl From<$name> for $underlying {
+            fn from(value: $name) -> Self {
+                $name::enum_to_value(value)
+            }
+        }
 
         impl From<$name> for crate::kernel_components::structures::BitNode<$underlying> {
             fn from(value: $name) -> Self {
@@ -270,7 +283,7 @@ macro_rules! _inner_bitflags {
 
         impl From<crate::kernel_components::structures::BitNode<$underlying>> for $name {
             fn from(value: crate::kernel_components::structures::BitNode<$underlying>) -> Self {
-                $name::Custom(value.0)
+                $name::node_to_enum(value)
             }
         }
 
