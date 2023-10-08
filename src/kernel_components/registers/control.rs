@@ -1,7 +1,7 @@
 /// Functions to manipulate with control registers.
  
 use crate::kernel_components::memory::{frames::Frame, paging::BIT_MASK};
-use crate::kernel_components::instructions::TLB::Pcid;
+use crate::kernel_components::arch_x86_64::TLB::Pcid;
 use crate::{bitflags, VirtualAddress};
 use core::arch::asm;
 
