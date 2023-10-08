@@ -11,7 +11,7 @@ use super::{
     temporary_pages::TempPage,
 };
 use crate::{VirtualAddress, PhysicalAddress, println};
-use crate::kernel_components::instructions::TLB;
+use crate::kernel_components::arch_x86_64::TLB;
 use core::ptr::NonNull;
 use core::ops::{Deref, DerefMut};
 
