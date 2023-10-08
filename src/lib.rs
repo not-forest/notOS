@@ -30,6 +30,7 @@
 /// - Operating Systems: Three Easy Pieces by Remzi Arpaci-Dusseau, Andrea Arpaci-Dusseau
 /// - MMURTL V1.0 by Richard A. Burgess
 /// - Rust Cookbook https://github.com/rust-lang-nursery/rust-cookbook
+/// - x86 arch source information: www.sandpile.org
 /// 
 /// # Additional Info
 /// Every single outer files will be inside the kernel_components dir.
@@ -74,17 +75,36 @@ pub mod kernel_components {
         pub use bitflags::BitNode;
     }
 
-    pub mod instructions {
+    pub mod arch_x86_64 {
+        pub mod privelege_rings;
+        pub mod descriptor_table;
         pub mod random;
-        pub mod interrupt;
         pub mod TLB;
 
+        pub mod interrupts {
+            pub mod interrupt;
+            // pub mod interrupt_descriptor_table;
+        }
+
+        pub mod segmentation {
+            pub mod global_descriptor_table;
+            pub mod task_state_segment;
+
+            pub use task_state_segment::TSS;
+            pub use global_descriptor_table::{Segment, SegmentDescriptor, SegmentSelector};
+        }
+
+        pub use segmentation::global_descriptor_table::GDT;
+        pub use descriptor_table::DTPointer;
+        pub use privelege_rings::PrivilegeLevel;
         pub use random::{Random, RdRand, RdSeed};
     }
 
     pub mod registers {
         pub mod control;
         pub mod mxscr;
+        pub mod segment_regs;
+        pub mod ms;
     }
 
     pub mod sync {
@@ -100,13 +120,13 @@ pub mod kernel_components {
             pub mod leak_alloc;
             pub mod bump_alloc;
             pub mod node_alloc;
-            pub mod free_list_alloc;
+            // pub mod free_list_alloc;
 
             pub use global_alloc::{GAllocator, SubAllocator, GLOBAL_ALLOCATOR};
             pub use leak_alloc::{LeakAlloc, LEAK_ALLOC};
             pub use bump_alloc::{BumpAlloc, BUMP_ALLOC};
             pub use node_alloc::{NodeAlloc, NODE_ALLOC};
-            pub use free_list_alloc::{FreeListAlloc, FREE_LIST_ALLOC};
+            // pub use free_list_alloc::{FreeListAlloc, FREE_LIST_ALLOC};
         }
 
         pub mod memory_module;
@@ -129,12 +149,12 @@ pub mod kernel_components {
         pub use inactive_tables::InactivePageTable;
     }
 
-    pub mod virtualization {
-        pub mod process;
-        pub mod thread;
+    // pub mod task_virtualization {
+    //     pub mod process;
+    //     pub mod thread;
 
-        pub use process::{Process, ProcState};
-    }
+    //     pub use process::{Process, ProcState};
+    // }
 
 }
 
@@ -156,7 +176,7 @@ pub use kernel_components::{
     },
 
     memory::{
-        allocators::{GLOBAL_ALLOCATOR, LEAK_ALLOC, BUMP_ALLOC, NODE_ALLOC, FREE_LIST_ALLOC},
+        allocators::{GLOBAL_ALLOCATOR, LEAK_ALLOC, BUMP_ALLOC, NODE_ALLOC},
     },
 
     vga_buffer::Color,
