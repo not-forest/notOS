@@ -64,7 +64,7 @@ impl<T> Mutex<T> {
     fn _inner_lock(&self) -> Result<MutexGuard<T>, PoisonError> {
         while self.status.swap(true, Ordering::Acquire) {
             // This halt is temporary.
-            crate::kernel_components::instructions::interrupts::interrupt::hlt();
+            crate::kernel_components::arch_x86_64::interrupts::interrupt::hlt();
         }
 
         if self.poisoned.load(Ordering::Relaxed) {
