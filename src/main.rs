@@ -20,7 +20,7 @@ static HEADER_START_FUNC: unsafe extern "C" fn() = header_start;
 static HEADER_END_FUNC: unsafe extern "C" fn() = header_end;
 
 /// This is the main binary (kernel) space. As the library will build in, more new features will be added further.
-use notOS::{warn, kernel_components::{memory::{self, memory_module::{InfoPointer, BootInfoHeader}}, registers::control}, Color, GLOBAL_ALLOCATOR, BUMP_ALLOC};
+use notOS::{println, warn, kernel_components::{memory::{self, memory_module::{InfoPointer, BootInfoHeader}}, registers::control}, Color, GLOBAL_ALLOCATOR, BUMP_ALLOC};
 
 #[no_mangle]
 pub extern "C" fn _start(_multiboot_information_address: usize) {
@@ -33,11 +33,12 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
     {
         let boot_info = unsafe { InfoPointer::load(_multiboot_information_address as *const BootInfoHeader ) }.unwrap();
         
+        control::Cr0::enable_write_protect_bit();
+
         // The global allocator is a mutable static that do not use any locking 
         // algorithm, so any operation on it, is unsafe.
         unsafe { GLOBAL_ALLOCATOR.r#use(&BUMP_ALLOC) };
-        
-        control::Cr0::enable_write_protect_bit();
+
         memory::init(&boot_info);
     }
 
@@ -51,33 +52,20 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
 
 #[allow(dead_code, unreachable_code)]
 fn main() -> ! {
-    use notOS::kernel_components::structures::thread_safe::ConcurrentList;
-    use notOS::{println, print};
+    use notOS::kernel_components::arch_x86_64::{GDT, segmentation::TSS};
+    
+    static TASK_STATE_SEGMENT: TSS = TSS::new();
 
-    {
-        let mut list = ConcurrentList::new();
-
-        for i in (0..10).rev() {
-            list.push(i);
-        }
-
-        list.remove(4);
-        list.remove(7);
-
-        for node in list.iter() {
-            print!("{}, ", node);
-        }
-        
-        println!("{}", list.len());
-
-        for i in 0..list.len() {
-            list.modify(0, i);
-        }
-
-        for node in list.iter() {
-            print!("{}, ", node);
-        }
+    use notOS::single;
+    single! {
+        pub GLOBAL_DESC_TABLE: GDT = GDT::flat_setup(&TASK_STATE_SEGMENT);
     }
+
+    GLOBAL_DESC_TABLE.load_table();
+
+    println!("{:?}\n", GLOBAL_DESC_TABLE);
+
+    println!(Color::CYAN; "Hello descriptors, hello segments, hello GDT!!!");
 
     loop {}
 }
