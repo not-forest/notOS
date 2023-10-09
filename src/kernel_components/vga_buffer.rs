@@ -257,11 +257,29 @@ macro_rules! println {
     };
 }
 
+/// Writes a warning message to the screen in yellow.
+/// 
+/// Works like println, but do not accept the color argument. The output will always be in yellow.
 #[macro_export]
 macro_rules! warn {
-    () => (crate::print!('\n'));
-    ($fmt:expr) => ($crate::print!(crate::Color::YELLOW; concat!("WANRING! " ,$fmt, '\n')));
-    ($fmt:expr, $($arg:tt)*) => (crate::print!(crate::Color::YELLOW; concat!("WANRING! ", $fmt, '\n'), $($arg)*));
+    () => ($crate::println!('\n'));
+    ($fmt:expr) => ($crate::println!($crate::Color::YELLOW; concat!("WANRING! " ,$fmt, '\n')));
+    ($fmt:expr, $($arg:tt)*) => ($crate::println!($crate::Color::YELLOW; concat!("WANRING! ", $fmt, '\n'), $($arg)*));
+}
+
+/// A fast macro to show the debug information about the item.
+/// 
+/// This macro will do nothing in release mode.
+#[macro_export]
+macro_rules! debug {
+    ($item:tt) => (
+        #[cfg(debug_assertions)]
+        $crate::println!(crate::Color::LIGHTCYAN; "{:?}", $item)
+    );
+    ($($item:tt),*) => (
+        $(debug!($item);)*
+    );
+    () => ();
 }
 
 #[doc(hidden)]
