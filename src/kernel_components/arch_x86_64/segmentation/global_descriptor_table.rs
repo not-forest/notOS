@@ -91,6 +91,12 @@ impl GDT {
         }
     }
 
+    /// Returns the current table from the 'DTPointer'.
+    #[inline]
+    pub fn from_dt_ptr(dt_ptr: DTPointer) -> Option<&'static GDT> {
+        unsafe { (dt_ptr.addr as *const Self).as_ref() }
+    }
+
     /// Loads the GDT to the CPU.
     /// 
     /// The lifetime of the table must be static to provide safety.
