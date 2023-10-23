@@ -213,6 +213,21 @@ impl EFER {
 
         unsafe { Self::write_raw(new_flags.into()) }
     }
+
+    /// Enables the nxe bit. This feature is essential for enhancing system security and stability.
+    /// 
+    /// By enabling the NXE bit, you instruct the CPU to prevent the execution of code in memory
+    /// regions that should only contain data. This helps protect against various security
+    /// vulnerabilities, such as buffer overflows and stack smashing attacks, where an attacker
+    /// attempts to execute arbitrary code in data segments.
+    #[inline]
+    pub fn enable_nxe_bit() {
+        let old_flags = Self::read();
+        let reserved = old_flags & !EFERFlags::all();
+        let new_flags = reserved | EFERFlags::NO_EXECUTE_ENABLE;
+
+        unsafe { Self::write_raw(new_flags.into()) }
+    }
 }
 
 impl FSBase {
