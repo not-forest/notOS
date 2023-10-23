@@ -1,6 +1,5 @@
 /// This module provides useful commands for working with descriptor tables
 
-use crate::VirtualAddress;
 use core::arch::asm;
 
 /// A pointer to a descriptor table.
@@ -17,7 +16,7 @@ use core::arch::asm;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(C, packed(2))]
 pub struct DTPointer {
-    pub addr: VirtualAddress,
+    pub addr: u64,
     pub size: u16,
 }
 
