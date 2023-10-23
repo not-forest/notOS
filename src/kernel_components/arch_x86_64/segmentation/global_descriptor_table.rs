@@ -8,22 +8,26 @@
 /// - Contain all the OS code and data.
 /// - Available to all tasks.
 
-use super::task_state_segment::{TSS_SIZE, TSS};
+pub use crate::kernel_components::registers::segment_regs::SegmentSelector;
 use crate::kernel_components::arch_x86_64::{
     PrivilegeLevel,
     DTPointer,
     descriptor_table::{lgdt, sgdt},
 };
-pub use crate::kernel_components::registers::segment_regs::{
-    SegmentSelector,
-    Segment,
-    CodeSegment,
-    StackSegment,
-};
-use crate::{bitflags, VirtualAddress};
-use core::ops::Deref;
+use crate::{bitflags, single, VirtualAddress};
+use super::task_state_segment::{TSS_SIZE, TSS};
+use core::ops::{Deref, Index};
 use core::arch::asm;
 use core::mem;
+
+/// A static instance of a Global Descriptor Table.
+/// 
+/// The table itself is a static mutable and is not hidden behind any synchronization primitive,
+/// therefore it must be used with caution. No default values, except the first empty instance
+/// is predefined on initialization.
+single!{
+    pub mut GLOBAL_DESCRIPTOR_TABLE: GDT = GDT::new();
+}
 
 /// Global Descriptor Table (GDT) implementation.
 /// 
@@ -49,7 +53,7 @@ impl GDT {
     pub const fn new() -> Self {
         Self { 
             table: [0; 8],
-            len: 1, 
+            len: 1,
         }
     }
 
@@ -86,7 +90,7 @@ impl GDT {
     #[inline]
     pub fn as_dt_ptr(&self) -> DTPointer {
         DTPointer {
-            addr: self.table.as_ptr() as VirtualAddress,
+            addr: self.table.as_ptr() as u64,
             size: (self.len * mem::size_of::<u64>() - 1) as u16,
         }
     }
@@ -139,12 +143,25 @@ impl GDT {
         gdt
     }
 
+    /// Rewrites the current GDT to some pre-made value.
+    pub fn reinit(&mut self, gdt: GDT) {
+        *self = gdt
+    }
+
     fn _inner_push(&mut self, entry: u64) -> usize {
         let index = self.len;
         self.table[index] = entry;
         self.len += 1;
 
         index
+    }
+}
+
+impl Index<usize> for GDT {
+    type Output = u64;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.table[index]
     }
 }
 
@@ -188,7 +205,7 @@ pub enum SegmentDescriptor {
 impl SegmentDescriptor {
     /// Null descriptor.
     /// 
-    /// It iss never referenced by the processor, and should always contain no data. Certain
+    /// It is never referenced by the processor, and should always contain no data. Certain
     /// emulators, like Bochs, will complain about limit exceptions if you do not have one 
     /// present. Some use this descriptor to store a pointer to the GDT itself (to use with 
     /// the LGDT instruction). The null descriptor is 8 bytes wide and the pointer is 6 bytes
@@ -205,7 +222,7 @@ impl SegmentDescriptor {
         0,
         0,
         0xFFFFF, 
-        0x9A,
+        0x9B,
         0xC
     );
 
@@ -213,7 +230,7 @@ impl SegmentDescriptor {
         0,
         0,
         0xFFFFF, 
-        0x9A,
+        0x9B,
         0xA
     );
 
@@ -221,7 +238,7 @@ impl SegmentDescriptor {
         0,
         0,
         0xFFFFF, 
-        0xFA,
+        0xFB,
         0xC
     );
 
@@ -229,7 +246,7 @@ impl SegmentDescriptor {
         0,
         0,
         0xFFFFF, 
-        0xFA,
+        0xFB,
         0xA
     );
 
@@ -237,7 +254,7 @@ impl SegmentDescriptor {
         0,
         0,
         0xFFFFF, 
-        0x92,
+        0x93,
         0xC
     );
 
@@ -245,7 +262,7 @@ impl SegmentDescriptor {
         0,
         0, 
         0xFFFFF, 
-        0xF2,
+        0xF3,
         0xC
     );
 
@@ -290,6 +307,19 @@ impl SegmentDescriptor {
         }
     }
 
+    /// Returns the value of the segment descriptor as u128.
+    /// 
+    /// If the descriptor is baseless, the high bits will be just zeroes.
+    #[inline]
+    pub const fn as_u128(&self) -> u128 {
+        match self {
+            SegmentDescriptor::Based(low_bits, high_bits) => {
+                *low_bits as u128 | ((*high_bits as u128) << 64)
+            },
+            SegmentDescriptor::Baseless(low_bits) => *low_bits as u128,
+        }
+    }
+
     /// Returns a segment descriptor as a u64 value. (LOW BITS ONLY)
     ///
     /// This function will return a valid response even after changing the flags within.
@@ -301,10 +331,10 @@ impl SegmentDescriptor {
         flags: DescriptorFlags,
     ) -> u64 {
         let limit_0_15 = limit.bits() & DescriptorLimit::LIMIT_0_15.bits();
-        let limit_16_19 = limit.bits() & DescriptorLimit::LIMIT_16_19.bits();
+        let limit_16_19 = (limit.bits() & DescriptorLimit::LIMIT_16_19.bits()) >> 16;
         let base_0_15 = base32.bits() & DescriptorBase::BASE_0_15.bits();
-        let base_16_23 = base32.bits() & DescriptorBase::BASE_16_23.bits();
-        let base_24_31 = base32.bits() & DescriptorBase::BASE_24_31.bits();
+        let base_16_23 = (base32.bits() & DescriptorBase::BASE_16_23.bits()) >> 16;
+        let base_24_31 = (base32.bits() & DescriptorBase::BASE_24_31.bits()) >> 24;
         let access_byte = access_byte.bits();
         let flags = flags.bits();
         
@@ -315,8 +345,8 @@ impl SegmentDescriptor {
         (base_16_23 as u64) <<  32 |
         (access_byte as u64) << 40 |
         (limit_16_19 as u64) << 48 |
-        (base_24_31 as u64) <<  56 |
-        (flags as u64) <<       52
+        (flags as u64) <<       52 |
+        (base_24_31 as u64) <<  56 
     }
 
     /// Returns a privilege level of the segment.
@@ -339,15 +369,15 @@ impl SegmentDescriptor {
     /// Creates a new TSS descriptor. 
     #[inline]
     pub fn tss_segment_descriptor(tss_ref: &'static TSS) -> Self {
-        let ptr = tss_ref as *const TSS;
+        let ptr = tss_ref as *const TSS as u64;
         SegmentDescriptor::Based(
             Self::format_bits(
                 DescriptorBase::new(ptr as u32),
-                DescriptorLimit::new(TSS_SIZE),
+                DescriptorLimit::new(TSS_SIZE - 1),
                 DescriptorAccessByte::new(0x89),
                 DescriptorFlags::new(0x0),
             ), 
-            ptr as u64,
+            ptr >> 32,
         )
     }
 }
@@ -409,7 +439,7 @@ bitflags! {
         /// and this bit is set to 0, the CPU trying to set this bit will trigger a page fault.
         /// Best left set to 1 unless otherwise needed.
         const ACCESSED_BIT = 1,
-        /// Works differently for different segment types.alloc
+        /// Works differently for different segment types.
         /// 
         /// ## Code segments
         /// 
@@ -508,7 +538,7 @@ impl DescriptorFlags {
 
 #[test_case]
 fn initiating_flat_setup() {
-    use crate::kernel_components::arch_x86_64::{GDT, segmentation::TSS};
+    use crate::kernel_components::arch_x86_64::segmentation::{TSS, GDT};
     use crate::single;
     
     static TASK_STATE_SEGMENT: TSS = TSS::new();
