@@ -237,22 +237,22 @@ macro_rules! println {
     
     ($fr:expr; $fmt:expr) => {
         $crate::kernel_components::vga_buffer::_coloring($fr, None);
-        println!($fmt);
+        $crate::println!($fmt);
         $crate::kernel_components::vga_buffer::_coloring($crate::Color::WHITE, Some($crate::Color::BLACK));
     };
     ($fr:expr; $bg:expr; $fmt:expr) => {
         $crate::kernel_components::vga_buffer::_coloring($fr, Some($bg));
-        println!($fmt);
+        $crate::println!($fmt);
         $crate::kernel_components::vga_buffer::_coloring($crate::Color::WHITE, Some($crate::Color::BLACK));
     };
     ($fr:expr; $fmt:expr, $($arg:tt)*) => {
         $crate::kernel_components::vga_buffer::_coloring($fr, None);
-        println!($fmt, $($arg)*);
+        $crate::println!($fmt, $($arg)*);
         $crate::kernel_components::vga_buffer::_coloring($crate::Color::WHITE, Some($crate::Color::BLACK));
     };
     ($fr:expr; $bg:expr; $fmt:expr, $($arg:tt)*) => {
         $crate::kernel_components::vga_buffer::_coloring($fr, Some($bg));
-        println!($fmt, $($arg)*);
+        $crate::println!($fmt, $($arg)*);
         $crate::kernel_components::vga_buffer::_coloring($crate::Color::WHITE, Some($crate::Color::BLACK));
     };
 }
@@ -267,14 +267,14 @@ macro_rules! warn {
     ($fmt:expr, $($arg:tt)*) => ($crate::println!($crate::Color::YELLOW; concat!("WANRING! ", $fmt, '\n'), $($arg)*));
 }
 
-/// A fast macro to show the debug information about the item.
+/// A fast macro to show the debug information about the item (in pretty print).
 /// 
 /// This macro will do nothing in release mode.
 #[macro_export]
 macro_rules! debug {
     ($item:tt) => (
         #[cfg(debug_assertions)]
-        $crate::println!(crate::Color::LIGHTCYAN; "{:?}", $item)
+        $crate::println!(crate::Color::LIGHTCYAN; "{:#?}", $item)
     );
     ($($item:tt),*) => (
         $(debug!($item);)*
