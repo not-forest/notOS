@@ -148,6 +148,11 @@ impl GDT {
         *self = gdt
     }
 
+    /// Returns the address of the GDT structure.
+    pub fn addr(&'static self) -> usize {
+        self as *const GDT as usize
+    }
+
     fn _inner_push(&mut self, entry: u64) -> usize {
         let index = self.len;
         self.table[index] = entry;
