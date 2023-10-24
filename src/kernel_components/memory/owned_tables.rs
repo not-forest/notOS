@@ -172,7 +172,7 @@ impl InnerMapper {
         let mut p1 = p2.next_table_create(page.p2_index(), allocator);
         
         if !p1[page.p1_index()].is_unused() {
-            crate::warn!("WARNING! The page must be unused.\nReceived page {:?} with address: {:#x} that is currently used.", page, page.start_address());
+            crate::warn!("The page must be unused.\nReceived page {:?} with address: {:#x} that is currently used.", page, page.start_address());
         }
         
         p1[page.p1_index()].set(frame, flags | PRESENT);
