@@ -2,6 +2,19 @@
 
 use core::arch::asm;
 
+/// Provides a type of a descriptor table.
+/// 
+/// Can be used to decide the table types in a segment exceptions or other places.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum DescriptorTableType {
+    /// Global descriptor table.
+    Gdt,
+    /// Interrupt descriptor table.
+    Idt,
+    /// Logical descriptor table.
+    Ldt,
+}
+
 /// A pointer to a descriptor table.
 /// 
 /// This pointer can be obtain during "sgdt" or "sidt" or used with "lgdt" and "lidt" asm 
