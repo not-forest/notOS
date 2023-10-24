@@ -225,7 +225,10 @@ macro_rules! _inner_bitflags {
                 Self::enum_to_value(*self)
             }
 
-            
+            pub const fn get_selected_bits(&self, mask: $underlying) -> $underlying {
+                self.bits() & mask
+            }            
+
             pub fn is_in(&self, bits: $underlying) -> bool {
                 self.as_node().is_in(bits)
             }
