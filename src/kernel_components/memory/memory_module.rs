@@ -250,12 +250,9 @@ pub fn init(boot_info: &InfoPointer) {
         println,
         kernel_components::{
             memory::{
-                InfoPointer, BootInfoHeader, 
-                AreaFrameAllocator, EntryFlags::WRITABLE,
-                self,
-
+                InfoPointer, BootInfoHeader, AreaFrameAllocator, EntryFlags,
                 allocators::GLOBAL_ALLOCATOR,
-                paging::Page,
+                paging::Page, self
             },
             registers::control,
         },            
@@ -292,9 +289,11 @@ pub fn init(boot_info: &InfoPointer) {
     #[cfg(debug_assertions)] { println!("Mapping the heap pages."); }
 
     for page in Page::range_inclusive(heap_start_page, heap_end_page) {
-        active_table.map(page, WRITABLE, &mut frame_allocator);
+        active_table.map(page, EntryFlags::WRITABLE, &mut frame_allocator);
+        #[cfg(debug_assertions)]
         println!(Color::LIGHTGRAY; "Mapping page at address {:#x}", page.start_address());
-    } 
+    }   
+
     #[cfg(debug_assertions)] { println!("Mapping complete."); }
 }
 
