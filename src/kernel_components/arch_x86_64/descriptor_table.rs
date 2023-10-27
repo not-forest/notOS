@@ -29,8 +29,8 @@ pub enum DescriptorTableType {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(C, packed(2))]
 pub struct DTPointer {
-    pub addr: u64,
     pub size: u16,
+    pub addr: u64,
 }
 
 impl DTPointer {
