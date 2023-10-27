@@ -33,7 +33,7 @@ build/arch/$(ARCH)/%.o: src/arch/$(ARCH)/%.asm
 
 # Debugging section
 run: $(ISO)
-	@qemu-system-x86_64 -cdrom $(ISO) -m 20M -s -S & 
+	@qemu-system-x86_64 -cdrom $(ISO) -m 20M -s -S -no-reboot -no-shutdown & 
 	@echo "Waiting for QEMU to start..."
 	@sleep 2
 	@gdb -ex "target remote :$(GDB_PORT)" -ex "symbol-file $(KERNEL)" -ex "layout asm"
@@ -57,7 +57,7 @@ build_kernel:
 
 # Release section
 release: $(RELEASE_ISO)
-	@qemu-system-x86_64 -cdrom $(RELEASE_ISO) -m 10M -s -S & 
+	@qemu-system-x86_64 -cdrom $(RELEASE_ISO) -m 10M -s -S -no-reboot -no-shutdown & 
 	@echo "Waiting for QEMU to start..."
 	@sleep 2
 	@gdb -ex "target remote :$(GDB_PORT)" -ex "symbol-file $(RELEASE)" -ex "layout asm"
