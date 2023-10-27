@@ -3,7 +3,8 @@
 #![cfg_attr(test, no_main)]
 #![allow(incomplete_features, unused, non_snake_case)]
 #![feature(custom_test_frameworks, used_with_arg, error_in_core, ptr_metadata, 
-        generic_const_exprs, allocator_api, slice_ptr_get, maybe_uninit_array_assume_init)]
+    generic_const_exprs, allocator_api, slice_ptr_get, maybe_uninit_array_assume_init, 
+    abi_x86_interrupt)]
 #![test_runner(crate::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
@@ -31,6 +32,7 @@
 /// - MMURTL V1.0 by Richard A. Burgess
 /// - Rust Cookbook https://github.com/rust-lang-nursery/rust-cookbook
 /// - x86 arch source information: www.sandpile.org
+/// - x86_64 arch source: https://www.intel.com/content/dam/www/public/us/en/documents/manuals/64-ia-32-architectures-software-developer-vol-3a-part-1-manual.pdf
 /// 
 /// # Additional Info
 /// Every single outer files will be inside the kernel_components dir.
@@ -76,14 +78,18 @@ pub mod kernel_components {
     }
 
     pub mod arch_x86_64 {
-        pub mod privelege_rings;
+        pub mod privilege_rings;
         pub mod descriptor_table;
         pub mod random;
         pub mod TLB;
 
         pub mod interrupts {
+            pub mod handler_functions;
             pub mod interrupt;
-            // pub mod interrupt_descriptor_table;
+            pub mod interrupt_descriptor_table;
+
+            pub use handler_functions::HandlerFn;
+            pub use interrupt_descriptor_table::{GateDescriptor, IDT, GateType, INTERRUPT_DESCRIPTOR_TABLE};
         }
 
         pub mod segmentation {
@@ -91,19 +97,19 @@ pub mod kernel_components {
             pub mod task_state_segment;
 
             pub use task_state_segment::TSS;
-            pub use global_descriptor_table::{Segment, SegmentDescriptor, SegmentSelector};
+            pub use global_descriptor_table::{SegmentDescriptor, SegmentSelector, GDT, GLOBAL_DESCRIPTOR_TABLE};
         }
 
-        pub use segmentation::global_descriptor_table::GDT;
         pub use descriptor_table::DTPointer;
-        pub use privelege_rings::PrivilegeLevel;
+        pub use privilege_rings::PrivilegeLevel;
         pub use random::{Random, RdRand, RdSeed};
     }
 
     pub mod registers {
+        pub mod segment_regs;
         pub mod control;
         pub mod mxscr;
-        pub mod segment_regs;
+        pub mod flags;
         pub mod ms;
     }
 
