@@ -68,6 +68,13 @@ fn main() -> ! {
     use notOS::kernel_components::arch_x86_64::segmentation::{
         TSS, GDT, GLOBAL_DESCRIPTOR_TABLE
     };
+
+    use notOS::kernel_components::arch_x86_64::interrupts::{
+        interrupt,
+        handler_functions::predefined::*,
+        INTERRUPT_DESCRIPTOR_TABLE,
+        GateDescriptor,
+    };
     
     static TASK_STATE_SEGMENT: TSS = TSS::new();
 
@@ -84,6 +91,18 @@ fn main() -> ! {
         StackSegment::write(
             SegmentSelector::new(2, false, PrivilegeLevel::KernelLevel)
         );
+
+        let gate_break = GateDescriptor::new_trap(BREAKPOINT);
+
+        INTERRUPT_DESCRIPTOR_TABLE.push(3, gate_break);
+        INTERRUPT_DESCRIPTOR_TABLE.load_table();
+        
+        for i in 0..16 {
+            let gate = INTERRUPT_DESCRIPTOR_TABLE[i];
+            println!("0x{:x}, 0x{:x}, 0x{:x}", gate.as_u128(), gate.handler_addr(), gate.type_attributes.0);
+        }
+    
+        interrupt::breakpoint();
     }
 
     println!(Color::LIGHTCYAN; "Hello interrupts.");
