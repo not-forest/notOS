@@ -9,11 +9,13 @@
 /// - Available to all tasks.
 
 pub use crate::kernel_components::registers::segment_regs::SegmentSelector;
+
 use crate::kernel_components::arch_x86_64::{
     PrivilegeLevel,
     DTPointer,
     descriptor_table::{lgdt, sgdt},
 };
+
 use crate::{bitflags, single, VirtualAddress};
 use super::task_state_segment::{TSS_SIZE, TSS};
 use core::ops::{Deref, Index};
@@ -58,10 +60,6 @@ impl GDT {
     }
 
     /// Adds the given segment descriptor to the GDT, returning the segment selector.
-    ///
-    /// # Warn
-    /// 
-    /// This function is not thread safe.
     /// 
     /// # Panics
     /// 
@@ -90,8 +88,8 @@ impl GDT {
     #[inline]
     pub fn as_dt_ptr(&self) -> DTPointer {
         DTPointer {
-            addr: self.table.as_ptr() as u64,
             size: (self.len * mem::size_of::<u64>() - 1) as u16,
+            addr: self.table.as_ptr() as u64,
         }
     }
 
@@ -104,6 +102,11 @@ impl GDT {
     /// Loads the GDT to the CPU.
     /// 
     /// The lifetime of the table must be static to provide safety.
+    /// 
+    /// # Warn
+    /// 
+    /// This is not enough for GDT to work fully. The segment registers must still be
+    /// reloaded with those values, usually with kernel mode ones.
     #[inline]
     pub fn load_table(&'static self) {
         unsafe { lgdt(&self.as_dt_ptr()) };
