@@ -4,7 +4,7 @@
 #![allow(incomplete_features, unused, non_snake_case)]
 #![feature(custom_test_frameworks, used_with_arg, error_in_core, ptr_metadata, 
     generic_const_exprs, allocator_api, slice_ptr_get, maybe_uninit_array_assume_init, 
-    abi_x86_interrupt)]
+    abi_x86_interrupt, asm_const)]
 #![test_runner(crate::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
@@ -90,6 +90,13 @@ pub mod kernel_components {
 
             pub use handler_functions::HandlerFn;
             pub use interrupt_descriptor_table::{GateDescriptor, IDT, GateType, INTERRUPT_DESCRIPTOR_TABLE};
+            pub use interrupt::{
+                cause_interrupt, cause_interrupt_unsafe,
+                enable, disable, 
+                breakpoint, 
+                divide_by_zero, 
+                hlt
+            };
         }
 
         pub mod segmentation {
@@ -135,6 +142,8 @@ pub mod kernel_components {
             // pub use free_list_alloc::{FreeListAlloc, FREE_LIST_ALLOC};
         }
 
+        pub mod stack_allocator;
+
         pub mod memory_module;
         pub mod memory_map;
         pub mod sections;
@@ -146,8 +155,9 @@ pub mod kernel_components {
         pub mod temporary_pages;
         pub mod inactive_tables;
 
-        pub use memory_module::{InfoPointer, BootInfoHeader, init, remap_kernel};
+        pub use memory_module::{MMU, InfoPointer, BootInfoHeader};
         pub use frames::AreaFrameAllocator;
+        pub use stack_allocator::StackAlloc;
         
         pub use paging::{Page, Table, Entry, EntryFlags};
         pub use owned_tables::ActivePageTable;
