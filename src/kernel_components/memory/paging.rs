@@ -11,7 +11,7 @@ use crate::{
     kernel_components::structures::IternumTrait,
     bitflags,
 };
-use core::ops::{Index, IndexMut};
+use core::ops::{Index, IndexMut, Add, Sub};
 use core::marker::PhantomData;
 
 /// A total amount of entries.
@@ -94,7 +94,24 @@ impl Page {
     }
 }
 
+impl Add<usize> for Page {
+    type Output = Page;
+    
+    fn add(self, rhs: usize) -> Self::Output {
+        Page { num: self.num + rhs }
+    }
+}
+
+impl Sub<usize> for Page {
+    type Output = Page;
+
+    fn sub(self, rhs: usize) -> Self::Output {
+        Page { num: self.num - rhs }
+    }
+}
+
 /// Iterator over pages.
+#[derive(Debug, Clone, Copy)]
 pub struct PageIter {
     start: Page,
     end: Page,
