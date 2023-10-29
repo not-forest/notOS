@@ -207,32 +207,6 @@ impl GateDescriptor {
         }
     }
 
-    pub fn new_temp(
-        handler_fn_addr: usize,
-    ) -> Self {
-        let selector = CodeSegment::read();
-        let attributes = TypeAttributes::new(
-            GateType::Trap, 
-            PrivilegeLevel::KernelLevel, 
-            true,
-        );
-        let offset = handler_fn_addr;
-
-        let offset_1 = offset as u16;
-        let offset_2 = (offset >> 16) as u16;
-        let offset_3 = (offset >> 32) as u32;
-
-        Self {
-            offset_1: offset_1,
-            selector: selector,
-            interupt_stack_table: 0,
-            type_attributes: attributes,
-            offset_2: offset_2,
-            offset_3: offset_3,
-            _reserved: 0,
-        }
-    }
-
     /// Creates a new interrupt gate.
     /// 
     /// For more flexibility, use new() method instead. This function use some regular options
