@@ -16,6 +16,7 @@ use core::ptr::NonNull;
 use core::ops::{Deref, DerefMut};
 
 /// This struct is a wrapper over the mapper struct. 
+#[derive(Debug)]
 pub struct ActivePageTable {
     inner: InnerMapper
 }
@@ -99,6 +100,7 @@ impl DerefMut for ActivePageTable {
 
 /// This struct is a wrapper around the active P4 table that owns
 /// the ownership of the table itself.
+#[derive(Debug)]
 pub struct InnerMapper {
     p4: NonNull<Table<Level4>>
 }
