@@ -3,6 +3,7 @@
 use crate::kernel_components::arch_x86_64::segmentation::{SegmentDescriptor, SegmentSelector};
 use crate::kernel_components::arch_x86_64::descriptor_table::DescriptorTableType;
 use crate::{VirtualAddress, bitflags};
+use core::ops::{Deref, DerefMut};
 
 /// A marker trait for all handler functions.
 pub trait HandlerFn: Sized + 'static {
@@ -29,23 +30,14 @@ pub type HandlerFunction = extern "x86-interrupt" fn(
 );
 implement_handler_type!(HandlerFunction);
 
-/// A handler function that "returns" some selector error code.
+/// A handler function that "returns" some selector error code or page fault error code.
 /// 
 /// This function does not diverge and must always return some error code. 
 pub type HandlerFunctionWithErrCode = extern "x86-interrupt" fn(
     stack_frame: InterruptStackFrame, 
-    error_code: SelectorErrorCode
+    error_code: ErrorCode
 );
 implement_handler_type!(HandlerFunctionWithErrCode);
-
-/// A special handler function type that "returns" some page fault related error code.
-/// 
-/// This function must only be used to handle page faults.
-pub type PageFaultHandlerFunction = extern "x86-interrupt" fn(
-    stack_frame: InterruptStackFrame, 
-    error_code: PageFaultErrorCode
-);
-implement_handler_type!(PageFaultHandlerFunction);
 
 /// A diverging handler function.
 /// 
@@ -62,14 +54,21 @@ implement_handler_type!(DivergingHandlerFunction);
 /// have no way out.
 pub type DivergingHandlerFunctionWithErrCode = extern "x86-interrupt" fn(
     stack_frame: InterruptStackFrame, 
-    error_code: PageFaultErrorCode
+    error_code: ErrorCode
 ) -> !;
 implement_handler_type!(DivergingHandlerFunctionWithErrCode);
 
 /// A collection of predefined functions that can be used within the gates.
 pub mod predefined {
-    use crate::{println, debug, Color};
+    use crate::{println, print, debug, Color};
     use super::*;
+
+    #[no_mangle]
+    extern "x86-interrupt" fn division_by_zero_handler(stack_frame: InterruptStackFrame) -> ! {
+        println!(Color::RED; "EXCEPTION: Division by zero.");
+        debug!(stack_frame);
+        loop {}
+    }
 
     #[no_mangle]
     extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
@@ -77,10 +76,59 @@ pub mod predefined {
         debug!(stack_frame);
     }
 
-    /// Sets a breakpoint.
+    #[no_mangle]
+    extern "x86-interrupt" fn double_fault_handler(stack_frame: InterruptStackFrame) {
+        println!(Color::RED; "EXCEPTION: Double Fault");
+        debug!(stack_frame);
+        panic!("END");
+    }
+
+    #[no_mangle]
+    extern "x86-interrupt" fn page_fault_handler(
+        stack_frame: InterruptStackFrame,
+        error_code: ErrorCode,
+    ) {
+        println!(Color::RED; "EXCEPTION: Page Fault");
+        debug!(stack_frame);
+
+        print!("Error code flags: ");
+        for error in PageFaultErrorCode::as_array() {
+            if error.is_in(error_code.0) {
+                print!("{:?} ", error);
+            }
+        } println!();
+    }
+
+    /// A regular division by zero handler. ('#DE')
+    /// 
+    /// This function provides the error info and a current stack table information.
+    pub const DIVISION_BY_ZERO: DivergingHandlerFunction = division_by_zero_handler;
+    /// Sets a breakpoint. ('#BP')
     /// 
     /// Will provide a current stack table information.
     pub const BREAKPOINT: HandlerFunction = breakpoint_handler;
+
+    /// Double fault handler. ('#DF')
+    /// 
+    /// Double fault occur when the entry for some function is not set to the
+    /// corresponding interrupt vector or a second exception occurs inside the
+    /// handler function of the prior exception.
+    /// 
+    /// It only works for a certain combinations of exceptions:
+    /// '#DE' -> '#TS', '#NP', '#SS', 'GP';
+    /// '#TS' -> '#TS', '#NP', '#SS', 'GP';
+    /// '#NP' -> '#TS', '#NP', '#SS', 'GP';
+    /// '#SS' -> '#TS', '#NP', '#SS', 'GP';
+    /// '#GP' -> '#TS', '#NP', '#SS', 'GP';
+    /// '#PF' -> '#TS', '#NP', '#SS', 'GP', '#PF';
+    pub const DOUBLE_FAULT: HandlerFunction = double_fault_handler;
+
+    /// A page fault function handler.
+    /// 
+    /// There are many ways for the page fault to occur, therefore the error code
+    /// must be used accordingly as it does provide additional info about the reason
+    /// of the page fault invocation.
+    pub const PAGE_FAULT: HandlerFunctionWithErrCode = page_fault_handler;
 }
 
 /// Represents the interrupt stack frame pushed by the CPU on interrupt or exception entry.
@@ -103,13 +151,32 @@ pub struct InterruptStackFrame {
     pub stack_segment: u64,
 }
 
+/// A representation for any error code that can be used in any handler function that has
+/// an error code.
+/// 
+/// It is important to know which type of error code is being used, when converting to the
+/// corresponding struct.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(transparent)]
+pub struct ErrorCode(pub u64);
+
+impl ErrorCode {
+    pub const fn selector_error_code(&self) -> SelectorErrorCode {
+        SelectorErrorCode::Custom(self.0)
+    }
+
+    pub const fn page_fault_error_code(&self) -> PageFaultErrorCode {
+        PageFaultErrorCode::Custom(self.0)
+    }
+}
+
 bitflags! {
     /// Describes an error code that must reference a segment selector, that is related to
     /// that error.
     /// 
     /// The bits 16-63 are reserved, so it is better to use new() method, if you wish to create
     /// your own error code.
-    #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub struct SelectorErrorCode: u64 {
         /// When set, the exception originated externally to the processor.
         const EXTERNAL_BIT = 1,
@@ -128,7 +195,7 @@ bitflags! {
     /// page;
     /// - a protection check failed;
     /// - any reserved bit in the page directory or table entries is set to 1.
-    #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub struct PageFaultErrorCode: u64 {
         /// If this bit is set, the page fault was caused by a page protection violation.
         /// If not set, it was caused by a non-present page.
