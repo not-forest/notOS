@@ -6,6 +6,8 @@
 /// state. This implementation is for 64-bit version, therefore it is used as a buffer for IDT.
 
 use crate::VirtualAddress;
+use crate::kernel_components::arch_x86_64::segmentation::SegmentSelector;
+use core::arch::asm;
 use core::mem;
 
 pub const TSS_SIZE: u32 = mem::size_of::<TSS>() as u32;
@@ -62,5 +64,33 @@ impl TSS {
             _reserved_4:                                           0,
             io_map_base_address_field: TSS_SIZE as u16,
         }
+    }
+
+    /// Loads the task state segment selectors value into the TSS register (TR).
+    /// 
+    /// This operation marks the TSS segment in GDT as busy. This prevents other
+    /// CPU from getting the old data from the register. This is not usable though,
+    /// because usually a single TSS segment per CPU is being used.
+    /// 
+    /// # Unsafe
+    /// 
+    /// This function is unsafe, because a right segment selector must be used.
+    #[inline]
+    pub unsafe fn write(selector: SegmentSelector) {
+        unsafe {
+            asm!("ltr {0:x}", in(reg) selector.0, options(nostack, preserves_flags));
+        }
+    }
+
+    /// Reads the current segment selector from the TSS register (TR)
+    #[inline]
+    pub fn read() -> SegmentSelector {
+        let segment: u16;
+
+        unsafe {
+            asm!("rtr {0:x}", out(reg) segment, options(nomem, nostack, preserves_flags));
+        }
+
+        SegmentSelector(segment)
     }
 }
