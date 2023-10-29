@@ -231,7 +231,7 @@ macro_rules! print {
 /// '''
 #[macro_export]
 macro_rules! println {
-    () => ($crate::print!('\n'));
+    () => ($crate::print!("\n"));
     ($fmt:expr) => ($crate::print!(concat!($fmt, '\n')));
     ($fmt:expr, $($arg:tt)*) => ($crate::print!(concat!($fmt, '\n'), $($arg)*));
     
@@ -277,7 +277,7 @@ macro_rules! debug {
         $crate::println!(crate::Color::LIGHTCYAN; "{:#?}", $item)
     );
     ($($item:tt),*) => (
-        $(debug!($item);)*
+        $($crate::debug!($item);)*
     );
     () => ();
 }
