@@ -80,7 +80,6 @@ pub mod predefined {
     extern "x86-interrupt" fn double_fault_handler(stack_frame: InterruptStackFrame) {
         println!(Color::RED; "EXCEPTION: Double Fault");
         debug!(stack_frame);
-        panic!("END");
     }
 
     #[no_mangle]
