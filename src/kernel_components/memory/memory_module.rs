@@ -5,6 +5,7 @@ use core::fmt::{Debug, Display};
 use core::error::Error;
 use core::sync::atomic::{AtomicBool, Ordering};
 use crate::kernel_components::arch_x86_64::segmentation::TSS;
+use crate::kernel_components::memory::frames::PAGE_SIZE;
 use crate::{VirtualAddress, PhysicalAddress, println};
 
 use super::{
@@ -32,6 +33,9 @@ pub struct MMU {
     frame_allocator: AreaFrameAllocator,
     /// Stack allocator instance, which allocates custom stack.
     stack_allocator: StackAlloc,
+
+    /// Amount of allocated frames.
+    frames_allocated: usize,
     /// Mark that makes initialization possible only once.
     is_mem_init: AtomicBool,
 }
@@ -73,9 +77,9 @@ impl MMU {
                 boot_info.mend(), 
                 memory_map_tag.memory_map_iter(),
             ),
-
             stack_allocator: StackAlloc::new(heap_end_page + 1),
 
+            frames_allocated: 0,
             is_mem_init: AtomicBool::new(false),
         }
     }
@@ -149,6 +153,8 @@ impl MMU {
             active_table: Some(active_table),
             frame_allocator: frame_allocator,
             stack_allocator: stack_allocator,
+
+            frames_allocated: (multiboot_end - multiboot_start) / PAGE_SIZE,
             is_mem_init: AtomicBool::new(true),
         }
     }
