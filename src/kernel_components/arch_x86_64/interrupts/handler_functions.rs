@@ -114,12 +114,12 @@ pub mod predefined {
     /// handler function of the prior exception.
     /// 
     /// It only works for a certain combinations of exceptions:
-    /// '#DE' -> '#TS', '#NP', '#SS', 'GP';
-    /// '#TS' -> '#TS', '#NP', '#SS', 'GP';
-    /// '#NP' -> '#TS', '#NP', '#SS', 'GP';
-    /// '#SS' -> '#TS', '#NP', '#SS', 'GP';
-    /// '#GP' -> '#TS', '#NP', '#SS', 'GP';
-    /// '#PF' -> '#TS', '#NP', '#SS', 'GP', '#PF';
+    /// - '#DE' -> '#TS', '#NP', '#SS', 'GP';
+    /// - '#TS' -> '#TS', '#NP', '#SS', 'GP';
+    /// - '#NP' -> '#TS', '#NP', '#SS', 'GP';
+    /// - '#SS' -> '#TS', '#NP', '#SS', 'GP';
+    /// - '#GP' -> '#TS', '#NP', '#SS', 'GP';
+    /// - '#PF' -> '#TS', '#NP', '#SS', 'GP', '#PF';
     pub const DOUBLE_FAULT: HandlerFunction = double_fault_handler;
 
     /// A page fault function handler.
@@ -128,6 +128,70 @@ pub mod predefined {
     /// must be used accordingly as it does provide additional info about the reason
     /// of the page fault invocation.
     pub const PAGE_FAULT: HandlerFunctionWithErrCode = page_fault_handler;
+}
+
+/// A collection of predefined software interrupts, that must be used with PIC or APIC
+/// interrupt controller.
+/// 
+/// # Warn
+/// 
+/// For any of this function, the interrupt controller must be reprogrammed to the desired
+/// interrupt vector. Every handler function entry must be 
+pub mod software {
+    use crate::{println, print, debug, Color};
+    use crate::kernel_components::arch_x86_64::controllers::{
+        PROGRAMMABLE_INTERRUPT_CONTROLLER,
+        PS2,
+    };
+    use super::*;
+
+    #[no_mangle]
+    extern "x86-interrupt" fn timer_interrupt_handler(stack_frame: InterruptStackFrame) {
+        unsafe {
+            PROGRAMMABLE_INTERRUPT_CONTROLLER.lock().master.end_of_interrupt();
+        }
+    }
+
+    #[no_mangle]
+    extern "x86-interrupt" fn keyboard_interrupt_handler(stack_frame: InterruptStackFrame) {
+        use crate::kernel_components::drivers::keyboards::GLOBAL_KEYBORD;
+        use crate::kernel_components::arch_x86_64::interrupts;
+
+        let scancode = PS2::new().read_data();
+        //print!("[//]");
+        unsafe {
+            interrupts::with_int_disabled(|| {
+                let mut keyboard = GLOBAL_KEYBORD.lock();
+
+                if let Ok(Some(keycode)) = keyboard.scan_key(scancode) {
+                    if let Some(key) = keyboard.scan_char(keycode) {
+                        print!("{}", key);
+                    }
+                }
+            });
+            PROGRAMMABLE_INTERRUPT_CONTROLLER.lock().master.end_of_interrupt();
+        }
+    }
+
+    /// A timer interrupt handler.
+    /// 
+    /// This handler will be used to switch between different threads and make the
+    /// virtualization part of the OS possible. The timer interrupt is essential in
+    /// performing task scheduling, time sharing, event handling and power management.
+    /// 
+    /// # Warn
+    /// 
+    /// Remap the PIC controller to work properly.
+    pub const TIMER_INTERRUPT: HandlerFunction = timer_interrupt_handler;
+
+    /// A keyboard interrupt handler.
+    /// 
+    /// This handler reads the value written in data port of the PS/2 controller, which will
+    /// decode the received scancode and write it into the VGA buffer.
+    /// 
+    /// When writing your own interrupt handler for PS/2 keyboard, do not forget to read the
+    /// scancode from the data por of the PS/2 controller.
+    pub const KEYBOARD_INTERRUPT: HandlerFunction = keyboard_interrupt_handler;
 }
 
 /// Represents the interrupt stack frame pushed by the CPU on interrupt or exception entry.
