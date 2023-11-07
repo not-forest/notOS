@@ -81,6 +81,8 @@ pub mod kernel_components {
         pub mod privilege_rings;
         pub mod descriptor_table;
         pub mod random;
+        pub mod post;
+        pub mod ports;
         pub mod TLB;
 
         pub mod interrupts {
@@ -92,11 +94,22 @@ pub mod kernel_components {
             pub use interrupt_descriptor_table::{GateDescriptor, IDT, GateType, INTERRUPT_DESCRIPTOR_TABLE};
             pub use interrupt::{
                 cause_interrupt, cause_interrupt_unsafe,
-                enable, disable, 
+                enable, disable, with_int_disabled, with_int_enabled,
                 breakpoint, 
                 divide_by_zero, 
                 hlt
             };
+        }
+
+        pub mod controllers {
+            pub mod ps_2;
+            pub mod pic;
+            pub mod apic;
+
+            pub mod pic_command_words;
+
+            pub use pic::{PIC, PROGRAMMABLE_INTERRUPT_CONTROLLER};
+            pub use ps_2::{PS2, PSControllerCommand, PSControllerConfiguration};
         }
 
         pub mod segmentation {
@@ -119,6 +132,8 @@ pub mod kernel_components {
         pub mod flags;
         pub mod ms;
     }
+
+    pub mod drivers;
 
     pub mod sync {
         pub mod mutex;
