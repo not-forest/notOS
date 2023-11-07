@@ -3,20 +3,74 @@
 /// Exception catching are done with interrupt description table and handler functions.
 
 use core::arch::asm;
+use crate::kernel_components::registers::flags::{XFLAGS, XFLAGSFlags};
 
-/// Enables interrupts
+/// Enables interrupts.
 #[inline(always)]
-pub fn enable() {
+pub unsafe fn enable() {
     unsafe { asm!("sti", options(preserves_flags, nostack)) }
 }
 
 /// Disables interrupts.
 #[inline(always)]
-pub fn disable() {
+pub unsafe fn disable() {
     unsafe { asm!("cli", options(preserves_flags, nostack)) }
 }
 
-/// The hlt function wrapper
+/// Does something with disabled interrupts.
+/// 
+/// This function is suitable for preventing deadlocks and other awful things that could be
+/// caused via interrupts. This basically disables the software interrupts to occur, which is
+/// timer interrupts and i/o's. It prevents the interrupt to cause undefined behavior of something
+/// that should not be interrupted.
+/// 
+/// # Unsafe
+/// 
+/// This function is unsafe because it must be used only in a very short and atomic parts of
+/// the OS logic. Overusing this will cause a latency in interrupts.
+#[inline(always)]
+pub unsafe fn with_int_disabled<F, T>(fun: F) -> T where F: Fn() -> T {
+    let enabled = XFLAGSFlags::INTERRUPT_FLAG.is_in(XFLAGS::read().bits());
+
+    if enabled {
+        disable();
+    }
+
+    let output = fun();
+
+    if enabled {
+        enable();
+    }
+
+    output
+}
+
+/// Does something with enabled interrupts.
+/// 
+/// This function can be used for doing something, which must be or can be interrupted via execution.
+/// 
+/// # Unsafe
+/// 
+/// This function is unsafe because the software interrupts must be initialized properly.
+#[inline(always)]
+pub unsafe fn with_int_enabled<F, T>(fun: F) -> T where F: Fn() -> T {
+    let enabled = XFLAGSFlags::INTERRUPT_FLAG.is_in(XFLAGS::read().bits());
+
+    if !enabled {
+        enable();
+    }
+
+    let output = fun();
+
+    if !enabled {
+        disable();
+    }
+
+    output
+}
+
+/// Halts the processor. This function is a better version of an infinite loop that will not
+/// overuse the CPU power.
 #[inline(always)]
 pub fn hlt() {
     unsafe { asm!("hlt", options(nomem, nostack)) }
@@ -37,7 +91,7 @@ pub fn breakpoint() {
 /// operation. The provided integer must be u32.
 #[inline(always)]
 #[no_mangle]
-pub fn divide_by_zero(input: u32) {
+pub unsafe fn divide_by_zero(input: u32) {
     unsafe {
         asm!(
             "mov {0:r}, rax",            // Load the input value into RAX
