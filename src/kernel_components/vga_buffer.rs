@@ -6,6 +6,7 @@
 
 use core::fmt;
 use crate::{
+    kernel_components::arch_x86_64::interrupts::with_int_disabled,
     kernel_components::sync::Mutex,
     single,
 };
@@ -169,7 +170,11 @@ struct Buffer {
 #[macro_export]
 macro_rules! move_cursor {
     ($row:expr, $col:expr) => {
-        LOGGER.lock().move_cursor($row, $col);
+        unsafe {
+            with_int_disabled(|| {
+                LOGGER.lock().move_cursor($row, $col);
+            });
+        }
     };
 }
 
@@ -285,14 +290,26 @@ macro_rules! debug {
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments) {
     use core::fmt::Write;
-    LOGGER.lock().write_fmt(args).unwrap();
+    unsafe {
+        with_int_disabled(|| {
+            LOGGER.lock().write_fmt(args).unwrap();
+        });
+    }
 }
 
 #[doc(hidden)]
 pub fn _coloring(fr: Color, bg: Option<Color>) {
     if let Some(bg) = bg {
-        LOGGER.lock().change_color(fr, bg);
+        unsafe {
+            with_int_disabled(|| {
+                LOGGER.lock().change_color(fr, bg);
+            });
+        }
     } else {
-        LOGGER.lock().change_color(fr, Color::BLACK);
+        unsafe {
+            with_int_disabled(|| {
+                LOGGER.lock().change_color(fr, Color::BLACK);
+            });
+        }
     }
 }
