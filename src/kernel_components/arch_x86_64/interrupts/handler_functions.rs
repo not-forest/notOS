@@ -86,7 +86,7 @@ pub mod predefined {
     extern "x86-interrupt" fn page_fault_handler(
         stack_frame: InterruptStackFrame,
         error_code: ErrorCode,
-    ) {
+    ) -> ! {
         println!(Color::RED; "EXCEPTION: Page Fault");
         debug!(stack_frame);
 
@@ -96,6 +96,8 @@ pub mod predefined {
                 print!("{:?} ", error);
             }
         } println!();
+
+        loop {}
     }
 
     /// A regular division by zero handler. ('#DE')
@@ -127,7 +129,7 @@ pub mod predefined {
     /// There are many ways for the page fault to occur, therefore the error code
     /// must be used accordingly as it does provide additional info about the reason
     /// of the page fault invocation.
-    pub const PAGE_FAULT: HandlerFunctionWithErrCode = page_fault_handler;
+    pub const PAGE_FAULT: DivergingHandlerFunctionWithErrCode = page_fault_handler;
 }
 
 /// A collection of predefined software interrupts, that must be used with PIC or APIC
@@ -158,7 +160,6 @@ pub mod software {
         use crate::kernel_components::arch_x86_64::interrupts;
 
         let scancode = PS2::new().read_data();
-        //print!("[//]");
         unsafe {
             interrupts::with_int_disabled(|| {
                 let mut keyboard = GLOBAL_KEYBORD.lock();
