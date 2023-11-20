@@ -26,7 +26,7 @@ use notOS::{
         arch_x86_64::interrupts,
         memory::MMU, 
         registers::{control, ms}}, 
-        GLOBAL_ALLOCATOR, BUMP_ALLOC,
+        GLOBAL_ALLOCATOR, FREE_LIST_ALLOC,
     };
 
 #[no_mangle]
@@ -63,7 +63,7 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
     // Memory initialization.
     // The global allocator is a mutable static that do not use any locking 
     // algorithm, so any operation on it, is unsafe.
-    unsafe { GLOBAL_ALLOCATOR.r#use(&BUMP_ALLOC) };
+    unsafe { GLOBAL_ALLOCATOR.r#use(&FREE_LIST_ALLOC) };
     
     // New MMU structure makes it easier to handle memory related commands.
     let mut MEMORY_MANAGEMENT_UNIT = MMU::new_init(_multiboot_information_address);
@@ -133,7 +133,23 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
 #[allow(dead_code, unreachable_code)]
 fn main() -> ! {
 
-    println!("Hello keyboard");
+    println!("Hello free list allocator.");
+
+    use notOS::BoxedDst;
+
+    {
+        let heap = BoxedDst::<u8>::new(1);
+        let heap = BoxedDst::<u16>::new(1);
+        let heap = BoxedDst::<u8>::new(1);
+    }
+    FREE_LIST_ALLOC.info();
+    {
+        let heap = BoxedDst::<u128>::new(1);
+        let heap = BoxedDst::<char>::new('a');
+        let heap = BoxedDst::<bool>::new(false);
+        let heap = BoxedDst::<i32>::new(1);
+    }
+    FREE_LIST_ALLOC.info();
 
     loop {}
 }
