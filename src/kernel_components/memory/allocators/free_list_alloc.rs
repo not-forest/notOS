@@ -45,13 +45,6 @@
 /// 
 /// Next fit is similar to first fit but remembers the last block searched in the linked 
 /// list. It starts searching from the last block, which can help improve allocation locality.
-///
-/// # Quick Fit:
-/// 
-/// Quick fit allocators maintain separate linked lists for different block sizes. When an 
-/// allocation request is made, the allocator selects the appropriate linked list based on 
-/// the requested size and performs an allocation from that list. This strategy can improve 
-/// allocation speed. 
 
 use crate::single;
 use super::SubAllocator;
@@ -69,7 +62,7 @@ const NODE_HEADER_SIZE: usize = mem::size_of::<NodeHeader>();
 
 /// Static default allocator instance
 single! {
-    pub FREE_LIST_ALLOC: FreeListAlloc = FreeListAlloc::new(
+    pub mut FREE_LIST_ALLOC: FreeListAlloc = FreeListAlloc::new(
         FREE_LIST_ALLOC_HEAP_START,
         FREE_LIST_ALLOC_HEAP_START + FREE_LIST_ALLOC_HEAP_ARENA,
         SearchStrategy::FIRST_FIT,
@@ -132,7 +125,7 @@ impl FreeListAlloc {
             search_strategy: search_strategy,
             head: AtomicUsize::new(0),
             heap_start, heap_end,
-            next_fit_ptr: AtomicUsize::new(heap_start),
+            next_fit_ptr: AtomicUsize::new(0),
             initialized: AtomicBool::new(false),
         }
     }
@@ -180,7 +173,11 @@ unsafe impl Allocator for FreeListAlloc {
 
         // The main loop for catching the current head.
         'main: loop {
-            let current_head = self.head.load(Ordering::Relaxed);
+            let current_head = if self.search_strategy == SearchStrategy::NEXT_FIT {
+                self.next_fit_ptr.load(Ordering::Relaxed)
+            } else {
+                self.head.load(Ordering::Relaxed)
+            };
 
             // Trying to fetch a head node. It can only fail if the head was changed in between
             // those two operations or the first node is not initialized yet.
@@ -192,7 +189,7 @@ unsafe impl Allocator for FreeListAlloc {
                     use SearchStrategy::*;
                     // Based on the selected strategy, the inner code will vary.
                     match self.search_strategy {
-                        FIRST_FIT => {
+                        FIRST_FIT | NEXT_FIT => {
                             if node.size > layout.size() {
                                 let new_node = NodeHeader::new(
                                     ((node as *const NodeHeader as usize + 1) + NODE_HEADER_SIZE + layout.size()) & align_mask,
@@ -236,6 +233,8 @@ unsafe impl Allocator for FreeListAlloc {
                                         continue 'main
                                     }
                                 }
+
+                                break 'inner
                             }
                         },
                         _ => unimplemented!(),
@@ -258,6 +257,15 @@ unsafe impl Allocator for FreeListAlloc {
                     Ordering::SeqCst,
                     Ordering::Relaxed,
                 );
+
+                if self.search_strategy == SearchStrategy::NEXT_FIT {
+                    self.next_fit_ptr.compare_exchange(
+                        self.next_fit_ptr.load(Ordering::Acquire),
+                        node.next.load(Ordering::Relaxed),
+                        Ordering::SeqCst,
+                        Ordering::Relaxed,
+                    );
+                }
                 
                 let return_ptr = (node as *const _ as usize + NODE_HEADER_SIZE) & align_mask;
                 
@@ -285,6 +293,13 @@ unsafe impl Allocator for FreeListAlloc {
                     );
 
                     self.head.compare_exchange(
+                        0,
+                        self.heap_start,
+                        Ordering::SeqCst,
+                        Ordering::Relaxed,
+                    );
+
+                    self.next_fit_ptr.compare_exchange(
                         0,
                         self.heap_start,
                         Ordering::SeqCst,
@@ -369,7 +384,7 @@ impl SubAllocator for FreeListAlloc {
 
 /// Search strategies that allocator can use.
 #[allow(non_camel_case_types)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SearchStrategy {
     /// This search strategy looks for the first available memory block in the linked list that 
     /// is large enough to satisfy the allocation request. It stops searching once it finds a 
@@ -386,13 +401,4 @@ pub enum SearchStrategy {
     /// Next fit is similar to first fit but remembers the last block searched in the linked 
     /// list. It starts searching from the last block, which can help improve allocation locality.
     NEXT_FIT,
-    // Quick fit allocators maintain separate linked lists for different block sizes. When an 
-    // allocation request is made, the allocator selects the appropriate linked list based on 
-    // the requested size and performs an allocation from that list. This strategy can improve 
-    // allocation speed. 
-    QUICK_FIT,
-}
-
-impl SearchStrategy {
-    
 }
