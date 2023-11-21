@@ -244,6 +244,17 @@ unsafe impl Allocator for FreeListAlloc {
                         if let Some(next_node) = (node.next.load(Ordering::SeqCst) as *mut NodeHeader).as_mut() {
                             next_node
                         } else {
+                            if self.search_strategy == NEXT_FIT {
+                                if let Ok(_) = self.next_fit_ptr.compare_exchange(
+                                    self.next_fit_ptr.load(Ordering::Acquire),
+                                    self.head.load(Ordering::Acquire),
+                                    Ordering::SeqCst,
+                                    Ordering::Relaxed,
+                                ) {
+                                    continue 'main
+                                }
+                            }
+
                             return Err(AllocError)
                         }
                     }
