@@ -133,23 +133,7 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
 #[allow(dead_code, unreachable_code)]
 fn main() -> ! {
 
-    println!("Hello free list allocator.");
-
-    use notOS::BoxedDst;
-
-    {
-        let heap = BoxedDst::<u8>::new(1);
-        let heap = BoxedDst::<u16>::new(1);
-        let heap = BoxedDst::<u8>::new(1);
-    }
-    FREE_LIST_ALLOC.info();
-    {
-        let heap = BoxedDst::<u128>::new(1);
-        let heap = BoxedDst::<char>::new('a');
-        let heap = BoxedDst::<bool>::new(false);
-        let heap = BoxedDst::<i32>::new(1);
-    }
-    FREE_LIST_ALLOC.info();
+    println!("Tasking soon!");
 
     loop {}
 }
