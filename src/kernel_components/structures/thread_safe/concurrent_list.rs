@@ -13,12 +13,12 @@ use core::ops::{Deref, DerefMut, Index, IndexMut};
 
 /// Thread safe concurrent list.
 #[derive(Debug)]
-pub struct ConcurrentList<T, A = GAllocator> where A: Allocator {
+pub struct ConcurrentList<T, A = GAllocator> where A: Allocator + 'static {
     head: AtomicUsize,
     tail: AtomicUsize,
     dummy: *mut ConcurrentListNode<T>,
     len: AtomicUsize,
-    alloc: A,
+    alloc: &'static mut A,
     _marker: PhantomData<T>,
 }
 
@@ -30,9 +30,9 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
     /// This instance will automatically insert a dummy node inside, to make lock-free
     /// algorithm possible. It is necessary to have this dummy node for the algorithm to work,
     /// therefore reading the list's content before adding more data in it, is wrong. 
-    pub fn new(alloc: A) -> Self {
+    pub fn new(alloc: &'static mut A) -> Self {
         let dummy  = ConcurrentListNode::<T>::dummy();
-        let ptr = ConcurrentListNode::node_alloc(dummy, &alloc);
+        let ptr = ConcurrentListNode::node_alloc(dummy, alloc);
 
         Self {
             head: AtomicUsize::new(ptr as usize),
@@ -48,7 +48,7 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
     /// 
     /// The content must be provided, as the first element of the list, because it has to be
     /// used instead of the dummy.
-    pub fn new_non_dummy(content: T, alloc: A) -> Self {
+    pub fn new_non_dummy(content: T, alloc: &'static mut A) -> Self {
         let node = ConcurrentListNode { 
             data: content,
             exist: AtomicBool::new(true),
@@ -56,7 +56,7 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
             prev: AtomicUsize::new(0),
         };
         
-        let ptr = ConcurrentListNode::node_alloc(node, &alloc);
+        let ptr = ConcurrentListNode::node_alloc(node, alloc);
 
         Self {
             head: AtomicUsize::new(ptr as usize),
@@ -210,7 +210,7 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
                 self.len.fetch_sub(1, Ordering::SeqCst);
 
                 // At this point we are free to deallocate the node.
-                ConcurrentListNode::node_dealloc(target_node_ptr as *mut ConcurrentListNode<T>, &self.alloc);
+                ConcurrentListNode::node_dealloc(target_node_ptr as *mut ConcurrentListNode<T>, self.alloc);
 
                 break 'main
             } else {
@@ -276,7 +276,7 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
 
                 // We must allocate our node before changing the pointers of our neighbors, for a
                 // very good reason.
-                let ptr = ConcurrentListNode::node_alloc(new_node, &self.alloc);
+                let ptr = ConcurrentListNode::node_alloc(new_node, self.alloc);
 
                 'inner: loop {
                     // At this point we should mark the target node, as unused. If we fail to do so,
@@ -340,7 +340,7 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
                     }
 
                     // It is safe to deallocate the marked node now.
-                    ConcurrentListNode::node_dealloc(target_node as *mut ConcurrentListNode<T>, &self.alloc);
+                    ConcurrentListNode::node_dealloc(target_node as *mut ConcurrentListNode<T>, self.alloc);
                     
                     if let Some(node) = unsafe { ptr.as_mut() } {
                         return Some(node)
@@ -356,7 +356,7 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
                 //
                 // No matter what happened, the previously allocated node is outdated now, so we must
                 // deallocate it and try again from the very start.
-                ConcurrentListNode::node_dealloc(ptr, &self.alloc); // It is okay to just do it like this since we own it.
+                ConcurrentListNode::node_dealloc(ptr, self.alloc); // It is okay to just do it like this since we own it.
                 continue 'main
             } else {
                 break 'main
@@ -512,7 +512,7 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
     /// list algorithm totally.
     pub unsafe fn undummy(&self) {
         ConcurrentListNode::node_dealloc(
-            self.dummy.as_mut().unwrap(), &self.alloc
+            self.dummy.as_mut().unwrap(), self.alloc
         );
     }
 
@@ -531,7 +531,7 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
     /// never deallocate those unused dummies anymore.
     pub unsafe fn dummy(&mut self) {
         let dummy  = ConcurrentListNode::<T>::dummy();
-        let ptr = ConcurrentListNode::node_alloc(dummy, &self.alloc);
+        let ptr = ConcurrentListNode::node_alloc(dummy, self.alloc);
 
         self.dummy = ptr;
     }
@@ -599,7 +599,7 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
 
                 // We must allocate our node before changing the pointers of our neighbors, for a
                 // very good reason.
-                let ptr = ConcurrentListNode::node_alloc(new_node, &self.alloc);
+                let ptr = ConcurrentListNode::node_alloc(new_node, self.alloc);
                 
                 // Trying to change the pointers of our neighbors and make them point toward us.
                 'inner: loop {
@@ -663,7 +663,7 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
                 //
                 // No matter what happened, the previously allocated node is outdated now, so we must
                 // deallocate it and try again from the very start.
-                ConcurrentListNode::node_dealloc(ptr, &self.alloc); // It is okay to just do it like this since we own it.
+                ConcurrentListNode::node_dealloc(ptr, self.alloc); // It is okay to just do it like this since we own it.
                 continue 'main
             
             // If we unable to get the node that we want to push, it is really an ok situation. Consider
@@ -692,7 +692,7 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
     
                 // We must to allocate our node before changing the pointers of our neighbors, for a
                 // very good reason.
-                let ptr = ConcurrentListNode::node_alloc(new_node, &self.alloc);
+                let ptr = ConcurrentListNode::node_alloc(new_node, self.alloc);
         
                 'inner: loop {
                     if let Err(_) = tail_node.next.compare_exchange(
@@ -741,7 +741,7 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
                 //
                 // No matter what happened, the previously allocated node is outdated now, so we must
                 // deallocate it and try again from the very start.
-                ConcurrentListNode::node_dealloc(ptr, &self.alloc); // It is okay to just do it like this since we own it.
+                ConcurrentListNode::node_dealloc(ptr, self.alloc); // It is okay to just do it like this since we own it.
                 continue 'main
             }
         }
@@ -897,7 +897,7 @@ impl<T, A: Allocator> Drop for ConcurrentList<T, A> {
 /// 
 /// This iterator do not consume the list itself, therefore the values within can be changed,
 /// by other threads while we iterate over it.
-pub struct ConcurrentListIter<'a, T, A = GAllocator> where A: Allocator {
+pub struct ConcurrentListIter<'a, T, A = GAllocator> where A: Allocator + 'static {
     list: &'a ConcurrentList<T, A>,
     index: usize,
     length: usize,
