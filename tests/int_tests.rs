@@ -29,4 +29,3 @@ pub extern "C" fn _start() -> ! {
 fn trivial_assertion() {
     assert_eq!(1, 1);
 }
-}
