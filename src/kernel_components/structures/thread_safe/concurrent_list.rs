@@ -241,7 +241,7 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
         // Another way would be either restrict the data type to T: Clone + Copy, or recursively
         // calling this same function over and over, which will put an overhead for the stack.
         let clone = || {
-            let mut cloned_content: T = unsafe { mem::zeroed() };
+            let mut cloned_content: T = unsafe { MaybeUninit::uninit().assume_init() };
             unsafe {
                 ptr::copy_nonoverlapping(
                     &new_content as *const T,
@@ -567,7 +567,7 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
         // Another way would be either restrict the data type to T: Clone + Copy, or recursively
         // calling this same function over and over, which will put an overhead for the stack.
         let clone = || {
-            let mut cloned_content: T = unsafe { mem::zeroed() };
+            let mut cloned_content: T = unsafe { MaybeUninit::uninit().assume_init() };
             unsafe {
                 ptr::copy_nonoverlapping(
                     &content as *const T,
@@ -578,7 +578,7 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
             cloned_content
         };
         let mut output;
-
+        
         'main: loop {
             // Try to obtain the node, which would be mutated (pushed forward).
             if let Some(next_node) = self.inner_get_smart(index) {
@@ -596,7 +596,7 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
                 // Getting the pointers at this moment, because we will loose the new_node afterwards.
                 let prev_node_ptr = new_node.prev.load(Ordering::Relaxed);
                 let next_node_ptr = new_node.next.load(Ordering::Relaxed);
-
+                
                 // We must allocate our node before changing the pointers of our neighbors, for a
                 // very good reason.
                 let ptr = ConcurrentListNode::node_alloc(new_node, self.alloc);
@@ -632,7 +632,7 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
                             );
                         }
                     }
-
+                    
                     if index != self.len() - 1 {
                         // Getting the next node as node structure.
                         let next_node = if let Some(n) = unsafe {
@@ -648,10 +648,10 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
                             continue 'inner
                         }
                     }
-
+                    
                     // Returning the allocated node right away.
                     output = unsafe { ptr.as_mut() };
-
+                    
                     break 'main
                 }
 
@@ -665,19 +665,19 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
                 // deallocate it and try again from the very start.
                 ConcurrentListNode::node_dealloc(ptr, self.alloc); // It is okay to just do it like this since we own it.
                 continue 'main
-            
-            // If we unable to get the node that we want to push, it is really an ok situation. Consider
-            // the situation when we want to insert new value at the end of the list, there will be nothing here.
-            // Or even more unfair, the index became out of range while we tried to do the insert, because the other,
-            // threads was faster. It is okay to the overall system, and we must respect it as a natural thing.
-            // 
-            // Therefore, if it happened, making our node the last of the list
+                
+                // If we unable to get the node that we want to push, it is really an ok situation. Consider
+                // the situation when we want to insert new value at the end of the list, there will be nothing here.
+                // Or even more unfair, the index became out of range while we tried to do the insert, because the other,
+                // threads was faster. It is okay to the overall system, and we must respect it as a natural thing.
+                // 
+                // Therefore, if it happened, making our node the last of the list
             } else {
                 // If it fail, we continue main here because, it means that we are no longer the tail.
                 let tail_node = if let Some(n) = unsafe {
                     (self.tail.load(Ordering::Relaxed) as *mut ConcurrentListNode<T>).as_mut()
                 } { n } else { continue 'main };
-    
+                
                 // This is where our clone comes in. Here, if this is not the first iteration,
                 // the data would be already moved to the new_node. Our force clone function,
                 // makes the data to stay always until we exit the loop.
@@ -689,11 +689,11 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
                     prev: AtomicUsize::new(tail_node as *mut ConcurrentListNode<T> as usize),
                     next: AtomicUsize::new(0),
                 };
-    
+                
                 // We must to allocate our node before changing the pointers of our neighbors, for a
                 // very good reason.
                 let ptr = ConcurrentListNode::node_alloc(new_node, self.alloc);
-        
+                
                 'inner: loop {
                     if let Err(_) = tail_node.next.compare_exchange(
                         0,
@@ -703,7 +703,7 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
                     ) {
                         break 'inner
                     }
-
+                    
                     // It is okay if it fails. It just means that some other thread was first
                     // and we are no longer the tail of the list.
                     self.tail.compare_exchange(
@@ -712,7 +712,7 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
                         Ordering::SeqCst,
                         Ordering::Relaxed,
                     );
-
+                    
                     // This will be true only for the first insert. We are changing both head and tail to
                     // this node, because we are the only element in the list now. The dummy value will
                     // be deleted, until the length will be zero again.
@@ -723,16 +723,16 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
                             Ordering::SeqCst,
                             Ordering::Relaxed,
                         );
-
+                        
                         unsafe { self.undummy() }
                     }
 
                     // Returning the allocated node right away.
                     output = unsafe { ptr.as_mut() };
-
+                    
                     break 'main
                 }
-
+                
                 // If we managed to get here, that means that we lost a proper info about our
                 // neighbors. We must retry the whole process again.
                 //
@@ -745,12 +745,12 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
                 continue 'main
             }
         }
-
+        
         // Increment the length of the list.
         self.len.fetch_add(1, Ordering::SeqCst);
         output
     }
-
+    
     /// Function that chooses between finding algorithm.
     /// 
     /// It will try to find the element that's index is closer to the left side of the list,
@@ -766,7 +766,7 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
             self.inner_get_backward(index)
         }
     }
-
+    
     /// Inner get algorithm.
     ///
     /// It does return the node itself, which must be invisible for the user, therefore
@@ -779,10 +779,10 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
             if index >= self.len() {
                 return None
             }
-
+            
             // Getting the first element of the list
             let mut head = self.head.load(Ordering::Acquire);
-
+            
             // If we got the pointer, try to it's read the corresponding node.
             let mut next = if let Some(n) = unsafe { 
                 (head as *mut ConcurrentListNode<T>).as_mut()
@@ -863,7 +863,7 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
 
                 // Cloning the data of the last used node.
                 let temp_ptr = prev as *mut ConcurrentListNode<T> as usize;
-
+                
                 prev = if let Some(n) = unsafe { 
                     (tail as *mut ConcurrentListNode<T>).as_mut()
                 } {
@@ -871,7 +871,7 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
                 } else {
                     continue 'main
                 };
-
+                
                 // Checking if the pointer is still not outdated. This must be done only,
                 // for backward search, because the insert() and remove() methods change
                 // the next pointer before the prev pointer.
@@ -934,12 +934,12 @@ impl<T> ConcurrentListNode<T> {
     pub fn obtain(&self) -> &T {
         self.deref()
     }
-
+    
     /// Returns the item from the node as mutable.
     pub fn obtain_mut(&mut self) -> &mut T {
         self.deref_mut()
     }
-
+    
     /// Marks the current node as deleted.
     pub fn mark_deleted(&self) {
         self.exist.compare_exchange(
@@ -949,7 +949,7 @@ impl<T> ConcurrentListNode<T> {
             Ordering::Relaxed
         );
     }
-
+    
     /// Marks the current node as used.
     pub fn mark_used(&self) {
         self.exist.compare_exchange(
@@ -959,7 +959,7 @@ impl<T> ConcurrentListNode<T> {
             Ordering::Relaxed
         );
     }
-
+    
     /// Just allocates the node to some random place on the heap.
     /// 
     /// Returns a pointer to the location.
