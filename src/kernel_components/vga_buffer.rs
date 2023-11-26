@@ -279,7 +279,7 @@ macro_rules! warn {
 macro_rules! debug {
     ($item:tt) => (
         #[cfg(debug_assertions)]
-        $crate::println!(crate::Color::LIGHTCYAN; "{:#?}", $item)
+        $crate::println!(crate::Color::LIGHTCYAN; "{:#x?}", $item)
     );
     ($($item:tt),*) => (
         $($crate::debug!($item);)*
