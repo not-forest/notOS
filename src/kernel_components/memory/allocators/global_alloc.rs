@@ -8,6 +8,7 @@
 use core::alloc::{GlobalAlloc, Layout, Allocator};
 use core::cell::UnsafeCell;
 use core::ptr::{null_mut, NonNull};
+use core::fmt::Debug;
 
 use super::*;
 use crate::single;
@@ -48,6 +49,15 @@ pub struct GAllocator {
     pub heap_addr: usize,
     pub arena_size: usize,
     allocator: &'static dyn SubAllocator,
+}
+
+impl Debug for GAllocator {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Global Allocator")
+            .field("heap_addr", &self.heap_addr)
+            .field("arena_size", &self.arena_size)
+            .finish()
+    }
 }
 
 impl GAllocator {
