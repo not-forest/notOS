@@ -7,7 +7,7 @@ use crate::kernel_components::memory::allocators::GAllocator;
 use core::sync::atomic::{AtomicUsize, Ordering, AtomicBool};
 use core::alloc::{GlobalAlloc, Allocator, Layout};
 use core::marker::PhantomData;
-use core::mem::{self, MaybeUninit};
+use core::mem::{self, MaybeUninit, ManuallyDrop};
 use core::ptr::{self, NonNull};
 use core::ops::{Deref, DerefMut, Index, IndexMut};
 
@@ -230,6 +230,8 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
     /// Returns 'None' if the modification operation failed, due to inability to locate
     /// the requested node. Returns Some(&T) otherwise.
     pub fn modify(&mut self, new_content: T, index: usize) -> Option<&T> {
+        let new_content = ManuallyDrop::new(new_content);
+
         // We are deep copying the provided content.
         //
         // It is necessary, because the insert might not succeed at the first try,
@@ -244,7 +246,7 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
             let mut cloned_content: T = unsafe { MaybeUninit::uninit().assume_init() };
             unsafe {
                 ptr::copy_nonoverlapping(
-                    &new_content as *const T,
+                    &*new_content as *const T,
                     &mut cloned_content as *mut T, 
                     1
                 );
@@ -556,6 +558,8 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
     /// 
     /// Returns a node as mutable reference.
     fn inner_insert(&mut self, content: T, index: usize) -> Option<&mut ConcurrentListNode<T>> {
+        let content = ManuallyDrop::new(content);
+        
         // We are deep copying the provided content.
         //
         // It is necessary, because the insert might not succeed at the first try,
@@ -570,7 +574,7 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
             let mut cloned_content: T = unsafe { MaybeUninit::uninit().assume_init() };
             unsafe {
                 ptr::copy_nonoverlapping(
-                    &content as *const T,
+                    &*content as *const T,
                     &mut cloned_content as *mut T, 
                     1
                 );
@@ -585,10 +589,11 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
                 // This is where our clone comes in. Here, if this is not the first iteration,
                 // the data would be already moved to the new_node. Our force clone function,
                 // makes the data to stay always until we exit the loop.
-                let content = clone();
+                let new_content = clone();
+
                 // We own the data and the new node, so we can set the pointers right away.
                 let new_node = ConcurrentListNode {
-                    data: content,
+                    data: new_content,
                     exist: AtomicBool::new(true),
                     prev: AtomicUsize::new(next_node.prev.load(Ordering::Relaxed)),
                     next: AtomicUsize::new(next_node as *mut ConcurrentListNode<T> as usize),
@@ -682,6 +687,7 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
                 // the data would be already moved to the new_node. Our force clone function,
                 // makes the data to stay always until we exit the loop.
                 let content = clone();
+
                 // We own the data and the new node, so we can set the pointers right away.
                 let new_node = ConcurrentListNode {
                     data: content,
