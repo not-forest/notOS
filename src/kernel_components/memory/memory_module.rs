@@ -1,12 +1,13 @@
 // Memory module for memory management. This is the entry point of memory functions and structs. 
 
-use core::mem::size_of;
+use core::mem::{size_of, MaybeUninit};
 use core::fmt::{Debug, Display};
 use core::error::Error;
 use core::sync::atomic::{AtomicBool, Ordering};
 use crate::kernel_components::arch_x86_64::segmentation::TSS;
 use crate::kernel_components::memory::frames::PAGE_SIZE;
 use crate::{VirtualAddress, PhysicalAddress, println};
+use crate::single;
 
 use super::{
     Page, ActivePageTable,
@@ -25,7 +26,7 @@ use super::{
 /// and contain the most important memory related info.
 #[derive(Debug)]
 pub struct MMU {
-    /// Grubs bultiboot info structure.
+    /// Grub's multiboot info structure.
     info_pointer: InfoPointer<'static>,
     /// Active table 
     active_table: Option<ActivePageTable>,
@@ -40,47 +41,39 @@ pub struct MMU {
     is_mem_init: AtomicBool,
 }
 
+/// A static MMU instance.
+/// 
+/// Note that it does not have a proper multiboot structure pointer, and must be initialized with
+/// init() method.
+single! {
+    pub mut MEMORY_MANAGEMENT_UNIT: MMU = unsafe { MMU::new() };
+}
+
 impl MMU {
-    /// Creates a new instance of MMU with given info pointer.
+
+    /// Creates a new instance of MMU without the pointer.
     /// 
-    /// Provide the info pointer to _start() function the kernel. This function does not
-    /// remap the kernel and only creates an instance of this unit.
+    /// This function does not remap the kernel and only creates an instance of this unit.
     #[inline]
-    pub fn new(multiboot_information_address: usize) -> Self {
+    pub fn new() -> Self {
         use crate::kernel_components::memory::{
             self, 
             allocators::GLOBAL_ALLOCATOR,
             EntryFlags,
         };
-        
-        let boot_info = unsafe { 
-            InfoPointer::load(
-                multiboot_information_address as *const BootInfoHeader 
-            ) 
-        }.unwrap();
-        
-        let memory_map_tag = boot_info.memory_map_tag()
-        .expect("Memory map tag required.");
 
-        let heap_start = unsafe { GLOBAL_ALLOCATOR.heap_addr };
-        let heap_end = heap_start + unsafe{ GLOBAL_ALLOCATOR.arena_size };
-        let heap_end_page = Page::containing_address(heap_end);
-
-        Self {
-            info_pointer: boot_info,
-            active_table: None,
-            
-            frame_allocator: AreaFrameAllocator::new(
-                boot_info.kstart() as usize, 
-                boot_info.kend() as usize, 
-                boot_info.mstart(), 
-                boot_info.mend(), 
-                memory_map_tag.memory_map_iter(),
-            ),
-            stack_allocator: StackAlloc::new(heap_end_page + 1),
-
-            frames_allocated: 0,
-            is_mem_init: AtomicBool::new(false),
+        unsafe {
+            #[allow(invalid_value)]
+            Self {
+                info_pointer: MaybeUninit::uninit().assume_init(),
+                active_table: None,
+                
+                frame_allocator: MaybeUninit::uninit().assume_init(),
+                stack_allocator: MaybeUninit::uninit().assume_init(),
+    
+                frames_allocated: 0,
+                is_mem_init: AtomicBool::new(false),
+            }
         }
     }
 
@@ -164,18 +157,19 @@ impl MMU {
     /// This function remaps the kernel, initialize the stack and sets active table
     /// in the structure.
     /// 
+    /// 
     /// # Panics
     /// 
     /// Panics if the memory is already initialized at least once.
     #[inline]
-    pub fn init(&mut self) {
+    pub fn init(&mut self, multiboot_information_address: usize) {
         assert!(
             !self.is_mem_init.load(Ordering::Acquire),
             "The memory is initialized already."
         );
 
         *self = MMU::new_init(
-            self.info_pointer.mstart()
+            multiboot_information_address
         );
     }
 
