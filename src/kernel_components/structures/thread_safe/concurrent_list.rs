@@ -221,6 +221,10 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
 
     /// Modifies the element at the given index with a given value.
     /// 
+    /// The old content value must be given, to make this function work as a CAS operation,
+    /// therefore it will not make any modifications if the old_content doesn't match the data.
+    /// Because of that, T must be PartialEq for this specific function.
+    /// 
     /// This algorithm creates a new copy of the target node, with the necessary changes,
     /// changes the pointers and marks the previous node as unused. The algorithm is almost
     /// the same as for insert, but instead of creating a new node between the existing ones,
@@ -229,7 +233,9 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
     /// 
     /// Returns 'None' if the modification operation failed, due to inability to locate
     /// the requested node. Returns Some(&T) otherwise.
-    pub fn modify(&mut self, new_content: T, index: usize) -> Option<&T> {
+    pub fn modify(&mut self, old_content: T, new_content: T, index: usize) -> Option<&T> 
+        where T: PartialEq
+    {
         let new_content = ManuallyDrop::new(new_content);
 
         // We are deep copying the provided content.
@@ -261,6 +267,10 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
                 // the data would be already moved to the new_node. Our force clone function,
                 // makes the data to stay always until we exit the loop.
                 let new_content = clone();
+
+                if target_node.data != old_content {
+                    break 'main
+                }
 
                 // If we managed to get the required node, it is time to create a new one,
                 // which we will swap with, the previous one.
@@ -430,7 +440,7 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
     pub fn min(&self) -> Option<&T> where T: PartialOrd + Ord, {
         self.iter().min()
     }
-
+    
     /// Finds the maximum value in the list
     pub fn max(&self) -> Option<&T> where T: PartialOrd + Ord {
         self.iter().max()
@@ -891,6 +901,40 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
     }
 }
 
+impl<T, A: Allocator> Index<usize> for ConcurrentList<T, A> {
+    type Output = T;
+    fn index(&self, index: usize) -> &Self::Output {
+        loop {
+            if let Some(value) = self.get(index) {
+                return value
+            }
+        }
+    }
+}
+
+impl<T, A: Allocator> IndexMut<usize> for ConcurrentList<T, A> {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        loop {
+            if let Some(value) = self.get_mut(index) {
+                return value
+            }
+        }
+    }
+}
+
+impl<T, A: Allocator> Deref for ConcurrentList<T, A> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        &self[0]
+    }
+}
+
+impl<T, A: Allocator> DerefMut for ConcurrentList<T, A> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self[0]
+    }
+}
+
 impl<T, A: Allocator> Drop for ConcurrentList<T, A> {
     fn drop(&mut self) {
         for _ in 0..self.len() {
@@ -925,28 +969,31 @@ impl<'a, T, A: Allocator> Iterator for ConcurrentListIter<'a, T, A> {
 /// Single generic node of the concurrent list.
 #[derive(Debug)]
 struct ConcurrentListNode<T> {
-    // Data that lies within the node.
+    /// Data that lies within the node.
     data: T,
-    // Flag that marks the node as deleted or not.
+    /// Flag that marks the node as deleted or not.
     exist: AtomicBool,
-    // Pointer value to the next node.
+    /// Pointer value to the next node.
     next: AtomicUsize,
-    // Pointer value to the previous node.
+    /// Pointer value to the previous node.
     prev: AtomicUsize,
 }
 
 impl<T> ConcurrentListNode<T> {
     /// Returns the item from the node as ref.
+    #[inline]
     pub fn obtain(&self) -> &T {
         self.deref()
     }
     
     /// Returns the item from the node as mutable.
+    #[inline]
     pub fn obtain_mut(&mut self) -> &mut T {
         self.deref_mut()
     }
     
     /// Marks the current node as deleted.
+    #[inline]
     pub fn mark_deleted(&self) {
         self.exist.compare_exchange(
             true, 
@@ -957,6 +1004,7 @@ impl<T> ConcurrentListNode<T> {
     }
     
     /// Marks the current node as used.
+    #[inline]
     pub fn mark_used(&self) {
         self.exist.compare_exchange(
             false, 
@@ -969,6 +1017,7 @@ impl<T> ConcurrentListNode<T> {
     /// Just allocates the node to some random place on the heap.
     /// 
     /// Returns a pointer to the location.
+    #[inline]
     fn node_alloc<A>(node: Self, alloc: &A) -> *mut Self where A: Allocator {
         let content_size = mem::size_of::<ConcurrentListNode<T>>();
         let content_align = mem::align_of::<ConcurrentListNode<T>>();
@@ -983,6 +1032,7 @@ impl<T> ConcurrentListNode<T> {
     }
 
     // Deallocates the node at given ptr
+    #[inline]
     fn node_dealloc<A>(ptr: *mut Self, alloc: &A) where A: Allocator {
         let content_size = mem::size_of::<ConcurrentListNode<T>>();
         let content_align = mem::align_of::<ConcurrentListNode<T>>();
@@ -994,6 +1044,7 @@ impl<T> ConcurrentListNode<T> {
         }
     }
 
+    #[inline]
     fn dummy() -> Self {
         Self {
             data: unsafe { MaybeUninit::uninit().assume_init() },
