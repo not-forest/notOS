@@ -29,7 +29,7 @@ pub unsafe fn disable() {
 /// This function is unsafe because it must be used only in a very short and atomic parts of
 /// the OS logic. Overusing this will cause a latency in interrupts.
 #[inline(always)]
-pub unsafe fn with_int_disabled<F, T>(fun: F) -> T where F: Fn() -> T {
+pub unsafe fn with_int_disabled<F, T>(fun: F) -> T where F: FnOnce() -> T {
     let enabled = XFLAGSFlags::INTERRUPT_FLAG.is_in(XFLAGS::read().bits());
 
     if enabled {
