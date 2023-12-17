@@ -67,8 +67,10 @@ pub mod kernel_components {
 
         pub mod thread_safe {
             pub mod concurrent_list;
+            pub mod concurrent_queue;
 
             pub use concurrent_list::ConcurrentList;
+            pub use concurrent_queue::ConcurrentQueue;
         }
 
         pub use bytes::{AsBytes, Bytes};
@@ -170,7 +172,7 @@ pub mod kernel_components {
         pub mod temporary_pages;
         pub mod inactive_tables;
 
-        pub use memory_module::{MMU, InfoPointer, BootInfoHeader};
+        pub use memory_module::{MMU, InfoPointer, BootInfoHeader, MEMORY_MANAGEMENT_UNIT};
         pub use frames::AreaFrameAllocator;
         pub use stack_allocator::StackAlloc;
         
@@ -180,12 +182,21 @@ pub mod kernel_components {
         pub use inactive_tables::InactivePageTable;
     }
 
-    // pub mod task_virtualization {
-    //     pub mod process;
-    //     pub mod thread;
+    pub mod task_virtualization {
+        pub mod scheduler;
+        pub mod round_robin;
+        
+        pub mod process;
+        pub mod thread;
+        pub mod pmu;
 
-    //     pub use process::{Process, ProcState};
-    // }
+        pub use pmu::{PMU, PROCESS_MANAGEMENT_UNIT};
+        pub use process::{Process, ProcState};
+        pub use thread::{Thread, ThreadOutput, ThreadState};
+        pub use scheduler::{Scheduler, Task};
+
+        pub use round_robin::{ROUND_ROBIN, RoundRobin};
+    }
 
 }
 
