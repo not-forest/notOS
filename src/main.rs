@@ -24,7 +24,7 @@ use notOS::{
     println, warn, single,
     kernel_components::{
         arch_x86_64::interrupts,
-        memory::MMU, 
+        memory::MEMORY_MANAGEMENT_UNIT, 
         registers::{control, ms}}, 
         GLOBAL_ALLOCATOR, FREE_LIST_ALLOC,
     };
@@ -63,11 +63,13 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
     // Memory initialization.
     // The global allocator is a mutable static that do not use any locking 
     // algorithm, so any operation on it, is unsafe.
-    unsafe { GLOBAL_ALLOCATOR.r#use(&FREE_LIST_ALLOC) };
+    unsafe { 
+        GLOBAL_ALLOCATOR.r#use(&FREE_LIST_ALLOC);
     
-    // New MMU structure makes it easier to handle memory related commands.
-    let mut MEMORY_MANAGEMENT_UNIT = MMU::new_init(_multiboot_information_address);
-
+        // New MMU structure makes it easier to handle memory related commands.
+        MEMORY_MANAGEMENT_UNIT.init(_multiboot_information_address);
+    };
+    
     // Enabling the nxe bit and write protect bit.
     control::Cr0::enable_write_protect_bit();
     ms::EFER::enable_nxe_bit();
@@ -125,14 +127,36 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
         PROGRAMMABLE_INTERRUPT_CONTROLLER.lock().reinit_chained(32).remap();
 
         interrupts::enable();
-    }
     
-    main();
+        use notOS::kernel_components::task_virtualization::{Process, PROCESS_MANAGEMENT_UNIT};
+        let stack = MEMORY_MANAGEMENT_UNIT.allocate_stack(6).unwrap();
+        
+        let mut p1 = Process::new(
+            stack, 
+            1024, 
+            1,
+            None,
+            || {   
+                println!("Hello. Main");
+
+                loop {}
+            },
+        );
+
+        p1.spawn(|| {
+            println!("Hello. Thread.");
+
+            loop {}
+        });
+
+        PROCESS_MANAGEMENT_UNIT.queue(p1); 
+    }
+
+    main()
 }
 
 #[allow(dead_code, unreachable_code)]
 fn main() -> ! {
-
     println!("Tasking soon!");
 
     loop {}
