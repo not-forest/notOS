@@ -4,7 +4,7 @@ use core::{ptr, mem, ops::Deref};
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Ord, Eq)]
 #[repr(transparent)]
-pub struct Bytes<'a>(&'a [u8]);
+pub struct Bytes<'a>(pub &'a [u8]);
 
 impl<'a> Bytes<'a> {
     #[inline(always)]
@@ -33,6 +33,9 @@ impl<'a> Into<&'a [u8]> for Bytes<'a> {
     }
 }
 
+/// A trait that provide some DST's to be used within different functions.
+/// 
+/// Each type that has this trait implemented can be represented as Bytes.
 pub trait AsBytes: Sized {
     fn as_bytes(&self) -> Bytes {
         let ptr = ptr::addr_of!(*self);
