@@ -4,7 +4,7 @@
 #![allow(incomplete_features, unused, non_snake_case)]
 #![feature(custom_test_frameworks, used_with_arg, error_in_core, ptr_metadata, 
     generic_const_exprs, allocator_api, slice_ptr_get, maybe_uninit_array_assume_init, 
-    abi_x86_interrupt, asm_const)]
+    abi_x86_interrupt, asm_const, type_alias_impl_trait, tuple_trait, unboxed_closures)]
 #![test_runner(crate::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
@@ -192,7 +192,7 @@ pub mod kernel_components {
 
         pub use pmu::{PMU, PROCESS_MANAGEMENT_UNIT};
         pub use process::{Process, ProcState};
-        pub use thread::{Thread, ThreadOutput, ThreadState};
+        pub use thread::{Thread, ThreadFn, ThreadOutput, ThreadState};
         pub use scheduler::{Scheduler, Task};
 
         pub use round_robin::{ROUND_ROBIN, RoundRobin};
