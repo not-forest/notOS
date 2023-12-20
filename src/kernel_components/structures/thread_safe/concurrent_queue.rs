@@ -1,11 +1,12 @@
 /// A concurrent queue implementation module.
 
 use crate::kernel_components::memory::allocators::GAllocator;
+use core::fmt;
 use core::sync::atomic::{AtomicUsize, Ordering, AtomicBool};
 use core::alloc::{GlobalAlloc, Allocator, Layout};
 use core::mem::{self, MaybeUninit};
-use core::marker::PhantomData;
 use core::ptr::{self, NonNull};
+use core::marker::PhantomData;
 
 /// A concurrent queue which uses Michael & Scott lock-free algorithm.
 #[derive(Debug)]
@@ -16,7 +17,7 @@ pub struct ConcurrentQueue<T, A = GAllocator> where A: Allocator + 'static {
     _marker: PhantomData<T>,
 }
 
-impl<T, A: Allocator> ConcurrentQueue<T, A> {
+impl<T: fmt::Debug, A: Allocator> ConcurrentQueue<T, A> {
     /// Creates a new instance of 'ConcurrentQueue'.
     /// 
     /// # Dummy
@@ -25,7 +26,7 @@ impl<T, A: Allocator> ConcurrentQueue<T, A> {
     /// algorithm possible.
     pub fn new(alloc: &'static mut A) -> Self {
         let dummy  = ConcurrentQueueNode::<T>::dummy();
-        let ptr = dummy.node_alloc(alloc);
+        let ptr = ConcurrentQueueNode::node_alloc(dummy, alloc);
 
         Self {
             head: AtomicUsize::new(ptr as usize),
@@ -45,7 +46,7 @@ impl<T, A: Allocator> ConcurrentQueue<T, A> {
             next: AtomicUsize::new(0),
         };
         
-        let ptr = node.node_alloc(alloc);
+        let ptr = ConcurrentQueueNode::node_alloc(node, alloc);
 
         Self {
             head: AtomicUsize::new(ptr as usize),
@@ -57,88 +58,103 @@ impl<T, A: Allocator> ConcurrentQueue<T, A> {
 
     /// Enqueues the new content to the end of the list concurrently.
     /// 
-    /// The algorithm is lock free and works on several individual CASes.
+    /// The algorithm is lock-free and works on several individual CASes.
     pub fn enqueue(&mut self, content: T) {
-        /// Allocating the node straight on, because we must enqueue the node no matter what.
+        // Allocating the node straight on, because we must enqueue the node no matter what.
         let node = ConcurrentQueueNode { 
             data: content,
             next: AtomicUsize::new(0),
         };
 
-        node.node_alloc(self.alloc);
+        let node_ptr = ConcurrentQueueNode::node_alloc(node, self.alloc);
 
         loop {
-            if let Some(tail) = unsafe { 
-                (self.tail.as_ptr() as *mut ConcurrentQueueNode<T>).as_mut() 
-            } {
-                let next = tail.next.load(Ordering::Relaxed);
-                if next == 0 {
-                    // We must link the tail node with our new one. Repeating the process until it's done.
-                    if let Ok(_) = tail.next.compare_exchange(
-                        tail.next.load(Ordering::Acquire),
-                        next,
-                        Ordering::SeqCst,
-                        Ordering::Relaxed,
-                    ) {
-                        // Trying to change the tail to the current real tail. If this fails, 
-                        // it means some new item was enqueued faster.    
-                        self.tail.compare_exchange(
-                            self.tail.load(Ordering::Acquire),
-                            tail as *const _ as usize,
-                            Ordering::SeqCst,
-                            Ordering::Relaxed,
-                        );
+            let tail = self.tail.load(Ordering::Acquire);
+            let tail_ptr = tail as *mut ConcurrentQueueNode<T>;
 
-                        break
-                    }
-                } else {
-                    // Trying to swing the tail to the next node.
+            let next = unsafe { (*tail_ptr).next.load(Ordering::Acquire) };
+
+            if next == 0 {
+                // We must link the tail node with our new one. Repeating the process until it's done.
+                if let Ok(_) = unsafe { (*tail_ptr).next.compare_exchange(
+                    next,
+                    node_ptr as usize,
+                    Ordering::SeqCst,
+                    Ordering::Relaxed,
+                ) } {
+                    // Trying to change the tail to the current real tail. If this fails, 
+                    // it means some new item was enqueued faster.    
                     self.tail.compare_exchange(
-                        self.tail.load(Ordering::Acquire),
-                        tail as *const _ as usize,
+                        tail,
+                        node_ptr as usize,
                         Ordering::SeqCst,
                         Ordering::Relaxed,
                     );
+
+                    break;
                 }
+            } else {
+                // Trying to swing the tail to the next node.
+                self.tail.compare_exchange(
+                    tail,
+                    next,
+                    Ordering::SeqCst,
+                    Ordering::Relaxed,
+                );
             }
         }
     }
 
+
     /// Dequeues the content from the queue.
     /// 
-    /// This function returns the content from the queue if it not empty. Returns None otherwise.
-    /// This algorithm is lock-free and it is based on CAS operations.
+    /// This function returns the content from the queue if it is not empty. Returns None otherwise.
+    /// This algorithm is lock-free and is based on CAS operations.
     pub fn dequeue(&mut self) -> Option<T> {
         loop {
-            if let Some(head) = unsafe { 
-                (self.head.as_ptr() as *mut ConcurrentQueueNode<T>).as_mut() 
-            } {
-                let tail = self.tail.load(Ordering::Relaxed);
-                let next = head.next.load(Ordering::Relaxed);
+            let tail = self.tail.load(Ordering::Acquire);
+            let head_ptr = self.head.load(Ordering::Acquire);
+
+            if let Some(head) = unsafe { (head_ptr as *mut ConcurrentQueueNode<T>).as_mut() } {
+                let next = head.next.load(Ordering::Acquire);
+
                 // Check №1: The head is equal to tail. This can mean that the tail is outdated
                 // or that the queue is empty.
-                if head as *const _ as usize == tail {
+                if head_ptr == tail {
                     // Check №2: The head points to nowhere. Returning None
                     if next == 0 {
-                        return None
+                        return None;
                     }
-                    // Trying to swing the tail to the next node, because it is outdated.
+                    // Trying to swing the tail to the next node because it is outdated.
                     self.tail.compare_exchange(
-                        self.tail.load(Ordering::Acquire),
                         tail,
+                        next,
                         Ordering::SeqCst,
                         Ordering::Relaxed,
                     );
                 } else {
                     if let Ok(_) = self.head.compare_exchange(
-                        self.head.load(Ordering::Acquire),
+                        head_ptr,
                         next,
                         Ordering::SeqCst,
                         Ordering::Relaxed,
                     ) {
+                        // Taking care of the data ownership.
+                        let old_head = unsafe {
+                            ptr::read(next as *mut ConcurrentQueueNode<T>)
+                        };
                         // Deallocating the previous head and returning data.
-                        let data = head.obtain();
-                        head.node_dealloc(self.alloc);
+                        let data = old_head.take();
+                        ConcurrentQueueNode::node_dealloc(head, self.alloc);
+
+                        // If the node was also a tail, we have to try to change the value back.
+                        self.tail.compare_exchange(
+                            next,
+                            self.head.load(Ordering::Relaxed),
+                            Ordering::SeqCst, 
+                            Ordering::Relaxed,
+                        );
+
                         return Some(data);
                     }
                 }
@@ -146,6 +162,7 @@ impl<T, A: Allocator> ConcurrentQueue<T, A> {
         }
     }
 }
+
 
 /// A single node for concurrent queue that is being allocated on the heap.
 /// 
@@ -162,7 +179,7 @@ pub struct ConcurrentQueueNode<T> {
 impl<T> ConcurrentQueueNode<T> {
     /// Returns the data.
     #[inline]
-    fn obtain(&mut self) -> T {
+    fn take(self) -> T {
         self.data
     }
 
@@ -170,14 +187,14 @@ impl<T> ConcurrentQueueNode<T> {
     /// 
     /// Returns a pointer to the location.
     #[inline]
-    fn node_alloc<A>(&self, alloc: &A) -> *mut Self where A: Allocator {
+    fn node_alloc<A>(node: Self, alloc: &A) -> *mut Self where A: Allocator {
         let content_size = mem::size_of::<ConcurrentQueueNode<T>>();
         let content_align = mem::align_of::<ConcurrentQueueNode<T>>();
         let layout = Layout::from_size_align(content_size, content_align).unwrap();
         let ptr = unsafe { alloc.allocate(layout) }.unwrap().as_mut_ptr() as *mut ConcurrentQueueNode<T>;
 
         unsafe {
-            ptr.write(*self);
+            ptr.write(node);
         };
 
         ptr
