@@ -9,7 +9,7 @@ use core::alloc::{GlobalAlloc, Allocator, Layout};
 use core::marker::PhantomData;
 use core::mem::{self, MaybeUninit, ManuallyDrop};
 use core::ptr::{self, NonNull};
-use core::ops::{Deref, DerefMut, Index, IndexMut};
+use core::ops::{Deref, DerefMut, Index};
 
 /// Thread safe concurrent list.
 #[derive(Debug)]
@@ -113,7 +113,7 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
     /// instead. This method is suitable if the element within the list is already some kind of data structure
     /// which is thread-safe via locking or other mechanisms (For example this method could be used for a list
     /// full of AtomicUsize or other atomics).
-    pub fn get_mut(&mut self, index: usize) -> Option<&mut T> {
+    pub fn get_mut(&self, index: usize) -> Option<&mut T> {
         // Try to obtain required node, and then return the value within.
         if let Some(node) = self.inner_get_smart(index) {
             Some(node.obtain_mut())
@@ -912,26 +912,10 @@ impl<T, A: Allocator> Index<usize> for ConcurrentList<T, A> {
     }
 }
 
-impl<T, A: Allocator> IndexMut<usize> for ConcurrentList<T, A> {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        loop {
-            if let Some(value) = self.get_mut(index) {
-                return value
-            }
-        }
-    }
-}
-
 impl<T, A: Allocator> Deref for ConcurrentList<T, A> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         &self[0]
-    }
-}
-
-impl<T, A: Allocator> DerefMut for ConcurrentList<T, A> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self[0]
     }
 }
 
