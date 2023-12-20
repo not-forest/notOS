@@ -25,7 +25,7 @@ macro_rules! implement_handler_type {
 /// A regular handler function.
 /// 
 /// This handler function does not return any error, nor output, nor it diverges.
-pub type HandlerFunction = extern "x86-interrupt" fn(
+pub type HandlerFunction = unsafe extern "x86-interrupt" fn(
     stack_frame: InterruptStackFrame
 );
 implement_handler_type!(HandlerFunction);
@@ -33,7 +33,7 @@ implement_handler_type!(HandlerFunction);
 /// A handler function that "returns" some selector error code or page fault error code.
 /// 
 /// This function does not diverge and must always return some error code. 
-pub type HandlerFunctionWithErrCode = extern "x86-interrupt" fn(
+pub type HandlerFunctionWithErrCode = unsafe extern "x86-interrupt" fn(
     stack_frame: InterruptStackFrame, 
     error_code: ErrorCode
 );
@@ -43,7 +43,7 @@ implement_handler_type!(HandlerFunctionWithErrCode);
 /// 
 /// A function that should never return (diverges). Usable for machine exceptions that will
 /// have no way out.
-pub type DivergingHandlerFunction = extern "x86-interrupt" fn(
+pub type DivergingHandlerFunction = unsafe extern "x86-interrupt" fn(
     stack_frame: InterruptStackFrame
 ) -> !;
 implement_handler_type!(DivergingHandlerFunction);
@@ -52,7 +52,7 @@ implement_handler_type!(DivergingHandlerFunction);
 /// 
 /// This function must not return anything. Usable for machine exceptions that will
 /// have no way out.
-pub type DivergingHandlerFunctionWithErrCode = extern "x86-interrupt" fn(
+pub type DivergingHandlerFunctionWithErrCode = unsafe extern "x86-interrupt" fn(
     stack_frame: InterruptStackFrame, 
     error_code: ErrorCode
 ) -> !;
@@ -61,43 +61,44 @@ implement_handler_type!(DivergingHandlerFunctionWithErrCode);
 /// A collection of predefined functions that can be used within the gates.
 pub mod predefined {
     use crate::{println, print, debug, Color};
+    use crate::kernel_components::arch_x86_64::interrupts;
     use super::*;
 
     #[no_mangle]
-    extern "x86-interrupt" fn division_by_zero_handler(stack_frame: InterruptStackFrame) -> ! {
+    unsafe extern "x86-interrupt" fn division_by_zero_handler(stack_frame: InterruptStackFrame) -> ! {
         println!(Color::RED; "EXCEPTION: Division by zero.");
         debug!(stack_frame);
         loop {}
     }
 
     #[no_mangle]
-    extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
+    unsafe extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
         println!(Color::RED; "EXCEPTION: Breakpoint");
         debug!(stack_frame);
     }
 
     #[no_mangle]
-    extern "x86-interrupt" fn double_fault_handler(stack_frame: InterruptStackFrame) {
+    unsafe extern "x86-interrupt" fn double_fault_handler(stack_frame: InterruptStackFrame) {
         println!(Color::RED; "EXCEPTION: Double Fault");
         debug!(stack_frame);
     }
 
     #[no_mangle]
-    extern "x86-interrupt" fn page_fault_handler(
+    unsafe extern "x86-interrupt" fn page_fault_handler(
         stack_frame: InterruptStackFrame,
         error_code: ErrorCode,
-    ) -> ! {
-        println!(Color::RED; "EXCEPTION: Page Fault");
-        debug!(stack_frame);
-
-        print!("Error code flags: ");
-        for error in PageFaultErrorCode::as_array() {
-            if error.is_in(error_code.0) {
-                print!("{:?} ", error);
-            }
-        } println!();
-
-        loop {}
+    ) {
+        interrupts::with_int_disabled(|| {
+            println!(Color::RED; "EXCEPTION: Page Fault");
+            debug!(stack_frame);
+    
+            print!("Error code flags: ");
+            for error in PageFaultErrorCode::as_array() {
+                if error.is_in(error_code.0) {
+                    print!("{:?} ", error);
+                }
+            } println!();
+        });
     }
 
     /// A regular division by zero handler. ('#DE')
@@ -129,7 +130,7 @@ pub mod predefined {
     /// There are many ways for the page fault to occur, therefore the error code
     /// must be used accordingly as it does provide additional info about the reason
     /// of the page fault invocation.
-    pub const PAGE_FAULT: DivergingHandlerFunctionWithErrCode = page_fault_handler;
+    pub const PAGE_FAULT: HandlerFunctionWithErrCode = page_fault_handler;
 }
 
 /// A collection of predefined software interrupts, that must be used with PIC or APIC
@@ -140,38 +141,77 @@ pub mod predefined {
 /// For any of this function, the interrupt controller must be reprogrammed to the desired
 /// interrupt vector. Every handler function entry must be 
 pub mod software {
+    use crate::kernel_components::arch_x86_64::interrupts;
+    use crate::kernel_components::memory::EntryFlags;
     use crate::{println, print, debug, Color};
     use crate::kernel_components::arch_x86_64::controllers::{
         PROGRAMMABLE_INTERRUPT_CONTROLLER,
         PS2,
     };
     use super::*;
-
+    
     #[no_mangle]
-    extern "x86-interrupt" fn timer_interrupt_handler(stack_frame: InterruptStackFrame) {
-        unsafe {
-            PROGRAMMABLE_INTERRUPT_CONTROLLER.lock().master.end_of_interrupt();
-        }
+    unsafe extern "x86-interrupt" fn timer_interrupt_handler(mut stack_frame: InterruptStackFrame) {
+        use crate::kernel_components::task_virtualization::{ROUND_ROBIN, Scheduler, PROCESS_MANAGEMENT_UNIT, ThreadFn};
+        // Perform a task switch.
+        //
+        // With disabled software interrupts, getting a next thread from the scheduler
+        // and changing both instruction and stack pointers to the corresponding pointers
+        // of that thread.
+        interrupts::with_int_disabled(|| {
+            // Trying to obtain some tasks from a scheduler if some.
+            if let Some(task) = ROUND_ROBIN.schedule() {
+                // //println!("{:#x?}", task);
+                // Trying to find the process by task's pid.
+                //
+                // If not exists, we can easily delete all tasks with this pid.
+                if let Some(process) = PROCESS_MANAGEMENT_UNIT.process_list
+                    .lock()
+                    .get_mut(task.pid) {
+                    let process_stack_top = process.stack.top;
+                    
+                    // Trying to find the thread by task's tid.
+                    //
+                    // If not exists, we can delete this specific task.
+                    if let Some(thread) = process.find_thread_mut(task.tid) {
+                        // Getting the current instruction pointer and stack pointer.
+                        let old_ip = stack_frame.instruction_pointer;
+                        let old_stack = stack_frame.stack_ptr;
+
+                        // Changing the current instruction and stack pointers to the thread's ones.
+                        stack_frame.instruction_pointer = thread.instruction_ptr;
+                        stack_frame.stack_ptr = thread.stack_ptr;
+                        // Writting the old values to the thread.
+                        thread.instruction_ptr = old_ip;
+                        thread.stack_ptr = old_stack;   
+                    }
+                }
+            }
+            
+            // Pushing new process if it exist.
+            PROCESS_MANAGEMENT_UNIT.dequeue();
+        });
+    
+        PROGRAMMABLE_INTERRUPT_CONTROLLER.lock().master.end_of_interrupt();
     }
 
     #[no_mangle]
-    extern "x86-interrupt" fn keyboard_interrupt_handler(stack_frame: InterruptStackFrame) {
+    unsafe extern "x86-interrupt" fn keyboard_interrupt_handler(stack_frame: InterruptStackFrame) {
         use crate::kernel_components::drivers::keyboards::GLOBAL_KEYBORD;
         use crate::kernel_components::arch_x86_64::interrupts;
 
         let scancode = PS2::new().read_data();
-        unsafe {
-            interrupts::with_int_disabled(|| {
-                let mut keyboard = GLOBAL_KEYBORD.lock();
+        
+        interrupts::with_int_disabled(|| {
+            let mut keyboard = GLOBAL_KEYBORD.lock();
 
-                if let Ok(Some(keycode)) = keyboard.scan_key(scancode) {
-                    if let Some(key) = keyboard.scan_char(keycode) {
-                        print!("{}", key);
-                    }
+            if let Ok(Some(keycode)) = keyboard.scan_key(scancode) {
+                if let Some(key) = keyboard.scan_char(keycode) {
+                    print!("{}", key);
                 }
-            });
-            PROGRAMMABLE_INTERRUPT_CONTROLLER.lock().master.end_of_interrupt();
-        }
+            }
+        });
+        PROGRAMMABLE_INTERRUPT_CONTROLLER.lock().master.end_of_interrupt();
     }
 
     /// A timer interrupt handler.
@@ -202,13 +242,13 @@ pub mod software {
 #[repr(C)]
 pub struct InterruptStackFrame {
     /// An instruction pointer to the current instruction address that must be executed.  
-    pub instruction_pointer: VirtualAddress,
+    pub instruction_pointer: usize,
     /// The selector of a code segment.
     pub code_segment: SegmentSelector,
     /// A values of RFLAGS register, on the moment of calling the handler function.
     pub cpu_flags: u64,
     /// Stack pointer value at the moment of the interrupt.
-    pub stack_ptr: VirtualAddress,
+    pub stack_ptr: usize,
     /// The segment descriptor of the stack segment.
     /// 
     /// Only the first half of the descriptor is needed. In Long Mode usually not used.
