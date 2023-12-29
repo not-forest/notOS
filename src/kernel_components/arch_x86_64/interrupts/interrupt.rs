@@ -53,7 +53,7 @@ pub unsafe fn with_int_disabled<F, T>(fun: F) -> T where F: FnOnce() -> T {
 /// 
 /// This function is unsafe because the software interrupts must be initialized properly.
 #[inline(always)]
-pub unsafe fn with_int_enabled<F, T>(fun: F) -> T where F: Fn() -> T {
+pub unsafe fn with_int_enabled<F, T>(fun: F) -> T where F: FnOnce() -> T {
     let enabled = XFLAGSFlags::INTERRUPT_FLAG.is_in(XFLAGS::read().bits());
 
     if !enabled {
