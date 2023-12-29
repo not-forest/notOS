@@ -14,7 +14,7 @@ use crate::kernel_components::structures::thread_safe::ConcurrentList;
 
 /// All states in which the process can be. Processes may behave differently
 /// based on the current state.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProcState {
     // Things that are usually happen most of the time.
     //
@@ -71,8 +71,8 @@ impl<'a> Process<'a> {
         stack: Stack,
         memory_size: usize, 
         pid: usize,
-        parent_process: Option<&'a Process<'a>>, 
-        main_function: fn(),
+        parent_process: Option<&'a Process<'a>>,
+        main_function: fn(&mut Thread),
     ) -> Self {
         let mut p = Self {
             stack: stack,
@@ -92,7 +92,7 @@ impl<'a> Process<'a> {
     /// 
     /// Each thread will obtain an individual random id. The thread parameter within the
     /// function is the thread itself that is about to spawn.
-    pub fn spawn(&mut self, thread_function: fn()) {
+    pub fn spawn(&mut self, thread_function: fn(&mut Thread)) {
         // Getting the ids of all current threads
         let threads_ids: Vec<usize> = self.threads
                                 .iter()
@@ -111,8 +111,8 @@ impl<'a> Process<'a> {
         // Creating the new instance of the thread.
         let mut thread = Thread::new(
             self.pid,
-            thread_id,
             self.stack.top,
+            thread_id,
             thread_function,
         );
         
@@ -144,5 +144,10 @@ impl<'a> Process<'a> {
             index += 1;
         }
         None
+    }
+
+    /// Entering the main thread inside the process.
+    pub fn run() {
+
     }
 }
