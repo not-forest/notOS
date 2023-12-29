@@ -15,11 +15,12 @@ use super::{Process, PROCESS_MANAGEMENT_UNIT};
 /// input thread must only be represented as a thread that will execute
 /// this function.
 /// 
-/// Each function that implements this trait, will also implement a Pointee and
-/// AsBytes. Each functions that have to be used within threads must implement
-/// this trait.
+/// It is a super-trait for Fn and, therefore, super-trait for FnMut and FnOnce.
+/// There is a straight rule to have the first parameter as a mutable reference to
+/// the thread. There is no need to know about which thread we are referring to, because
+/// it is done by the process' spawn method.
 pub trait ThreadFn<Args: Tuple>: Fn<Args> {
-    extern "rust-call" fn call_thread(&self, args: Args) -> Self::Output;
+    extern "rust-call" fn call_thread(&self, args: (&mut Thread, Args)) -> Self::Output;
 }
 
 /// All the states in which thread can be. Threads may behave differently
@@ -27,6 +28,9 @@ pub trait ThreadFn<Args: Tuple>: Fn<Args> {
 /// inner threads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThreadState {
+    // Initiated, yet never ran. This thread's function must be called for the
+    // first time.
+    INIT,
     // Things that are usually happen most of the time.
     //
     /// The thread is currently doing some tasks.
@@ -64,7 +68,6 @@ pub struct ThreadOutput<F> {
 /// 
 /// The generic value T is the value which the thread's function must return at the end of
 /// execution.
-#[repr(C)]
 pub struct Thread {
     /// Universal id of the current thread in the process' scope.
     pub tid: usize,
@@ -76,6 +79,8 @@ pub struct Thread {
     pub stack_ptr: usize,
     /// The current state of the thread.
     pub thread_state: ThreadState,
+    /// A function that the current thread must perform
+    pub fun: fn(&mut Thread),
 }
 
 impl Debug for Thread {
@@ -97,13 +102,14 @@ impl Thread {
     /// some amount of instructions. Each individual thread must have an individual
     /// tid that cannot collide with other threads within the same process, while can
     /// be the same among other threads.
-    pub fn new(process_id: usize, thread_id: usize, stack_ptr: usize, function: fn()) -> Self {
+    pub fn new(process_id: usize, stack_pointer: usize, thread_id: usize, function: fn(&mut Thread)) -> Self {
         Self {
             pid: process_id,
             tid: thread_id,
             instruction_ptr: function as usize,
-            stack_ptr: stack_ptr,
-            thread_state: ThreadState::RUNNING,
+            stack_ptr: stack_pointer,
+            thread_state: ThreadState::INIT,
+            fun: function,
         }
     }
 
@@ -116,7 +122,7 @@ impl Thread {
     /// # Warn
     /// 
     /// This behavior can be recursive of course and could cause some issues.
-    pub fn spawn(&self, thread_function: fn()) {
+    pub fn spawn(&self, thread_function: fn(&mut Thread)) {
         unsafe {
             let mut list = PROCESS_MANAGEMENT_UNIT.process_list.lock();
             list.get_mut(self.pid)
