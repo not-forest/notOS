@@ -4,6 +4,8 @@ use crate::kernel_components::arch_x86_64::segmentation::{SegmentDescriptor, Seg
 use crate::kernel_components::arch_x86_64::descriptor_table::DescriptorTableType;
 use crate::{VirtualAddress, bitflags};
 use core::ops::{Deref, DerefMut};
+use core::arch::asm;
+use core::mem;
 
 /// A marker trait for all handler functions.
 pub trait HandlerFn: Sized + 'static {
@@ -99,6 +101,7 @@ pub mod predefined {
                 }
             } println!();
         });
+        loop {}
     }
 
     /// A regular division by zero handler. ('#DE')
@@ -152,7 +155,19 @@ pub mod software {
     
     #[no_mangle]
     unsafe extern "x86-interrupt" fn timer_interrupt_handler(mut stack_frame: InterruptStackFrame) {
-        use crate::kernel_components::task_virtualization::{ROUND_ROBIN, Scheduler, PROCESS_MANAGEMENT_UNIT, ThreadFn};
+        use crate::kernel_components::task_virtualization::{
+            ROUND_ROBIN, Scheduler, PROCESS_MANAGEMENT_UNIT, ThreadFn, Thread,
+            ThreadState, ProcState,
+        };
+
+        // This thread input must be changed when the function call must be done.
+        //
+        // The input is a mutable reference, therefore it will be putted within the 'rdi' register.
+        let mut thread_input = 0;
+
+        // Pushing new process if it exist.
+        PROCESS_MANAGEMENT_UNIT.dequeue();
+
         // Perform a task switch.
         //
         // With disabled software interrupts, getting a next thread from the scheduler
@@ -168,31 +183,61 @@ pub mod software {
                 if let Some(process) = PROCESS_MANAGEMENT_UNIT.process_list
                     .lock()
                     .get_mut(task.pid) {
-                    let process_stack_top = process.stack.top;
-                    
+
                     // Trying to find the thread by task's tid.
                     //
                     // If not exists, we can delete this specific task.
                     if let Some(thread) = process.find_thread_mut(task.tid) {
                         // Getting the current instruction pointer and stack pointer.
-                        let old_ip = stack_frame.instruction_pointer;
-                        let old_stack = stack_frame.stack_ptr;
-
-                        // Changing the current instruction and stack pointers to the thread's ones.
-                        stack_frame.instruction_pointer = thread.instruction_ptr;
-                        stack_frame.stack_ptr = thread.stack_ptr;
+                        let new_stack = thread.stack_ptr;
+                        let new_ip  = thread.instruction_ptr;
+                        
                         // Writting the old values to the thread.
-                        thread.instruction_ptr = old_ip;
-                        thread.stack_ptr = old_stack;   
+                        thread.stack_ptr = stack_frame.stack_ptr;   
+                        thread.instruction_ptr = stack_frame.instruction_pointer;    
+                        
+                        // Changing the current instruction and stack pointers to the thread's ones.
+                        stack_frame.stack_ptr = new_stack;
+                        stack_frame.instruction_pointer = new_ip;
+
+                        if thread.thread_state == ThreadState::INIT {
+                            // If the thread is only about to run we must provide some additional information for it.
+                            //
+                            // This basically means that we must perform the fast-call calling convention manually, so the
+                            // thread can use a mutable reference to itself and perform the instructions.
+                            // interrupts::breakpoint();
+                            thread_input = thread as *const _ as usize;
+                            // Changing the state to running, which will not affect the thread's input.
+                            thread.thread_state = ThreadState::RUNNING;
+                        }
                     }
                 }
-            }
-            
-            // Pushing new process if it exist.
-            PROCESS_MANAGEMENT_UNIT.dequeue();
+            }    
         });
-    
+
         PROGRAMMABLE_INTERRUPT_CONTROLLER.lock().master.end_of_interrupt();
+
+        // Before the iretq instruction is done, we must change the rdi, so it can be used as
+        // a pointer parameter for a thread function. Because the calling convention automatically
+        // generates a code that pops the rdi, own epilogue must be created, to prevent this action.
+        asm!(
+            "pop rdi",
+
+            "cmp {0:r}, 0x0",    // If the thread must obtain some inputs, do:
+            "cmovne rdi, {0:r}", // This line only changes the behavior.
+            
+            "add rsp, 0xa0",
+            "pop rax",
+            "pop rcx",
+            "pop rdx",
+            "pop rsi",
+            "pop r8",
+            "pop r9",
+            "pop r10",
+            "pop r11",
+            "iretq",
+            in(reg) thread_input,
+        );
     }
 
     #[no_mangle]
@@ -260,7 +305,8 @@ pub struct InterruptStackFrame {
 /// 
 /// It is important to know which type of error code is being used, when converting to the
 /// corresponding struct.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq,                         //interrupts::breakpoint();
+Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
 pub struct ErrorCode(pub u64);
 
