@@ -142,13 +142,9 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
 
                 t.spawn(|_t| {
                     println!(Color::YELLOW; "Hello from the second thread!!");
-
-                    loop {}
                 });
 
                 println!(Color::CYAN; "This is still the main thread.");
-
-                loop {}
             },
         );
 
