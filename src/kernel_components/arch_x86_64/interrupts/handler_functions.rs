@@ -146,6 +146,7 @@ pub mod predefined {
 pub mod software {
     use crate::kernel_components::arch_x86_64::interrupts;
     use crate::kernel_components::memory::EntryFlags;
+    use crate::kernel_components::task_virtualization::Thread;
     use crate::{println, print, debug, Color};
     use crate::kernel_components::arch_x86_64::controllers::{
         PROGRAMMABLE_INTERRUPT_CONTROLLER,
@@ -191,15 +192,14 @@ pub mod software {
                         // Getting the current instruction pointer and stack pointer.
                         let new_stack = thread.stack_ptr;
                         let new_ip  = thread.instruction_ptr;
-                        
+
                         // Writting the old values to the thread.
                         thread.stack_ptr = stack_frame.stack_ptr;   
-                        thread.instruction_ptr = stack_frame.instruction_pointer;    
+                        thread.instruction_ptr = stack_frame.instruction_pointer;
                         
-                        // Changing the current instruction and stack pointers to the thread's ones.
+                        // Changing the current stack pointer to the thread's ones.
                         stack_frame.stack_ptr = new_stack;
-                        stack_frame.instruction_pointer = new_ip;
-
+                        
                         if thread.thread_state == ThreadState::INIT {
                             // If the thread is only about to run we must provide some additional information for it.
                             //
@@ -209,6 +209,13 @@ pub mod software {
                             thread_input = thread as *const _ as usize;
                             // Changing the state to running, which will not affect the thread's input.
                             thread.thread_state = ThreadState::RUNNING;
+
+                            // Changing the current instruction pointer to the helper function that will call the 
+                            stack_frame.instruction_pointer = task_switch_call as usize;
+                        } else {    
+                            // Chaning the current instruction pointer to the thread's instruction pointer, because the
+                            // thread's function was already once called.
+                            stack_frame.instruction_pointer = new_ip;
                         }
                     }
                 }
@@ -238,6 +245,17 @@ pub mod software {
             "iretq",
             in(reg) thread_input,
         );
+    }
+
+    /// A helper function for calling the new thread, with fast-call calling convention
+    ///
+    /// This function calls the inner function of the thread and passes the thread itself
+    /// as a mutable reference argument. This function must be divergent, because we are never
+    /// calling it ourselves but only jumping to it's address.
+    fn task_switch_call(t: &mut Thread) -> ! {
+        (t.fun)(t);
+        
+        loop {}
     }
 
     #[no_mangle]
