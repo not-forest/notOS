@@ -254,7 +254,7 @@ pub mod software {
     /// calling it ourselves but only jumping to it's address.
     fn task_switch_call(t: &mut Thread) -> ! {
         (t.fun)(t);
-        
+
         loop {}
     }
 
@@ -457,6 +457,5 @@ impl SelectorErrorCode {
         self.bits() == 0
     }
 }
-
 
 
