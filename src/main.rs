@@ -67,6 +67,9 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
     // algorithm, so any operation on it, is unsafe.
     unsafe { 
         GLOBAL_ALLOCATOR.r#use(&FREE_LIST_ALLOC);
+        FREE_LIST_ALLOC.change_strategy(
+            notOS::kernel_components::memory::allocators::free_list_alloc::SearchStrategy::BEST_FIT
+        );
     
         // New MMU structure makes it easier to handle memory related commands.
         MEMORY_MANAGEMENT_UNIT.init(_multiboot_information_address);
@@ -137,14 +140,24 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
             1,
             None,
             |t| {
-                use notOS::Color;
-                println!(Color::CYAN; "Hello from the main thread");
+                use notOS::{Color, BoxedDst};
+                println!(Color::CYAN; "Lets allocate something from threads.");
+                
+                let boxed1 = BoxedDst::<u64>::new_uninit();
+                let boxed2 = BoxedDst::<i128>::new(-128);
+                let boxed3 = BoxedDst::new(1);
+                
+                drop(boxed1);
+                drop(boxed2);
+                drop(boxed3);
+
+                let boxy = BoxedDst::new("In the box i go"); 
 
                 t.spawn(|_t| {
-                    println!(Color::YELLOW; "Hello from the second thread!!");
+                    println!(Color::YELLOW; "I want my box here ;(");
                 });
 
-                println!(Color::CYAN; "This is still the main thread.");
+                println!(Color::CYAN; "Whats in the box: {:?}", *boxy);
             },
         );
 
