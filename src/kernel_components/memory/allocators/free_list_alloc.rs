@@ -182,7 +182,10 @@ unsafe impl Allocator for FreeListAlloc {
             // Trying to fetch a head node. It can only fail if the head was changed in between
             // those two operations or the first node is not initialized yet.
             if let Some(mut node) = unsafe { (current_head as *mut NodeHeader).as_mut() } {
+                /// We need the previous node to compare and pointer swapping.
                 let mut prev_node = node.ref_clone();
+                /// This variable will only be used when best fit or worst fit mode is enabled.
+                let mut fit_node = node.ref_clone();
                 
                 // Inner loop for searching within the nodes.
                 'inner: loop {
@@ -237,8 +240,66 @@ unsafe impl Allocator for FreeListAlloc {
                                 break 'inner
                             }
                         },
+                        BEST_FIT => {
+                            if node.size == layout.size() {
+                                let next_node = node.next.load(Ordering::Relaxed);
+                                if let Err(_) = prev_node.next.compare_exchange(
+                                    node as *const _ as usize,
+                                    next_node,
+                                    Ordering::SeqCst,
+                                    Ordering::Relaxed,
+                                ) {
+                                    if let Err(_) = prev_node.next.compare_exchange(
+                                        0,
+                                        next_node,
+                                        Ordering::SeqCst,
+                                        Ordering::Relaxed,
+                                    ) {
+                                        unsafe { ptr::drop_in_place(next_node as *mut NodeHeader); }
+                                        continue 'main
+                                    }
+                                }
+
+                                break 'inner
+                            } else if node.size > layout.size() {
+                                let next_node = node.next.load(Ordering::Relaxed);
+                                
+                                if node.size < prev_node.size {
+                                    fit_node = node.ref_clone();
+                                }
+
+                                if next_node == 0 {
+                                    let new_node = NodeHeader::new(
+                                        ((fit_node as *const NodeHeader as usize + 1) + NODE_HEADER_SIZE + layout.size()) & align_mask,
+                                        fit_node.next.load(Ordering::Relaxed),
+                                        fit_node.size - layout.size(),
+                                    );
+    
+                                    if let Err(_) = prev_node.next.compare_exchange(
+                                        fit_node as *const _ as usize,
+                                        new_node,
+                                        Ordering::SeqCst,
+                                        Ordering::Relaxed,
+                                    ) {
+                                        if let Err(_) = prev_node.next.compare_exchange(
+                                            0,
+                                            new_node,
+                                            Ordering::SeqCst,
+                                            Ordering::Relaxed,
+                                        ) {
+                                            unsafe { ptr::drop_in_place(new_node as *mut NodeHeader); }
+                                            continue 'main
+                                        }
+                                    }
+
+                                    node = fit_node;
+                                    break 'inner
+                                }
+                            }
+                        }
                         _ => unimplemented!(),
                     }
+
                     prev_node = node.ref_clone();
                     node = unsafe {
                         if let Some(next_node) = (node.next.load(Ordering::SeqCst) as *mut NodeHeader).as_mut() {
