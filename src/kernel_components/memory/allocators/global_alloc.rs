@@ -34,8 +34,8 @@ use core::sync::atomic::{
 /// 
 /// Default values should be changed before some allocations will occur, otherwise
 /// it will leak memory. 
-//#[global_allocator]
 single! {
+    #[global_allocator]
     pub mut GLOBAL_ALLOCATOR: GAllocator = GAllocator {
         heap_addr: leak_alloc::LEAK_ALLOC_HEAP_START,
         arena_size: leak_alloc::LEAK_ALLOC_HEAP_ARENA,
