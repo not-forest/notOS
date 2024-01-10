@@ -67,13 +67,15 @@ impl<'a> Process<'a> {
     /// 
     /// This function takes another function as a main point of the process. The argument of that function must always be
     /// the thread, that will execute the function in the future.
-    pub fn new(
+    pub fn new<F>(
         stack: Stack,
         memory_size: usize, 
         pid: usize,
         parent_process: Option<&'a Process<'a>>,
-        main_function: fn(&mut Thread),
-    ) -> Self {
+        main_function: F,
+    ) -> Self where
+        F: ThreadFn
+    {
         let mut p = Self {
             stack: stack,
             memory_size,
@@ -92,7 +94,9 @@ impl<'a> Process<'a> {
     /// 
     /// Each thread will obtain an individual random id. The thread parameter within the
     /// function is the thread itself that is about to spawn.
-    pub fn spawn(&mut self, thread_function: fn(&mut Thread)) {
+    pub fn spawn<F>(&mut self, thread_function: F) where
+        F: ThreadFn
+    {
         // Getting the ids of all current threads
         let threads_ids: Vec<usize> = self.threads
                                 .iter()
