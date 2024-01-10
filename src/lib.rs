@@ -39,6 +39,8 @@
 /// Every single macro can be accessed within this crate. The main components will be also accessed from here.
 /// The library can be used to rewrite the main kernel, therefore there will be forks of main kernel implementation. 
 
+/// Alloc crate for convenient allocations.
+extern crate alloc;
 
 /// Main entry point for outer structures and objects
 pub mod kernel_components {
