@@ -26,7 +26,6 @@ use notOS::{
         arch_x86_64::interrupts,
         memory::MEMORY_MANAGEMENT_UNIT, 
         registers::{control, ms},
-        task_virtualization::Thread,
     }, 
         GLOBAL_ALLOCATOR, FREE_LIST_ALLOC,
     };
@@ -132,6 +131,7 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
         PROGRAMMABLE_INTERRUPT_CONTROLLER.lock().reinit_chained(32).remap();
     
         use notOS::kernel_components::task_virtualization::{Process, PROCESS_MANAGEMENT_UNIT};
+
         let stack = MEMORY_MANAGEMENT_UNIT.allocate_stack(6).unwrap();
         
         let p1 = Process::new(
@@ -140,24 +140,16 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
             1,
             None,
             |t| {
-                use notOS::{Color, BoxedDst};
-                println!(Color::CYAN; "Lets allocate something from threads.");
-                
-                let boxed1 = BoxedDst::<u64>::new_uninit();
-                let boxed2 = BoxedDst::<i128>::new(-128);
-                let boxed3 = BoxedDst::new(1);
-                
-                drop(boxed1);
-                drop(boxed2);
-                drop(boxed3);
+                use notOS::Color;
+                println!(Color::CYAN; "Data transfering:");
 
-                let boxy = BoxedDst::new("In the box i go"); 
+                let my_data = 0xdeadbee;
 
-                t.spawn(|_t| {
-                    println!(Color::YELLOW; "I want my box here ;(");
+                t.spawn(move |_t| {
+                    println!(Color::YELLOW; "Here is my data: {:#x}", my_data);
                 });
 
-                println!(Color::CYAN; "Whats in the box: {:?}", *boxy);
+                println!(Color::CYAN; "Looks like i've lost my data ;(");
             },
         );
 
