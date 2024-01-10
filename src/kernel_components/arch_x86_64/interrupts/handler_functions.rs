@@ -252,8 +252,14 @@ pub mod software {
     /// This function calls the inner function of the thread and passes the thread itself
     /// as a mutable reference argument. This function must be divergent, because we are never
     /// calling it ourselves but only jumping to it's address.
-    fn task_switch_call(t: &mut Thread) -> ! {
-        (t.fun)(t);
+    unsafe fn task_switch_call(t: &mut Thread) -> ! {
+        let closure = &t.fun;
+
+        closure(
+            mem::transmute(
+                t as *const _ as usize
+            )
+        );
 
         loop {}
     }
