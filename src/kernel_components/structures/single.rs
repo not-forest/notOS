@@ -6,12 +6,16 @@
 /// initialization of data that should only be initialized once and then
 /// reused across the application.
 
+use crate::kernel_components::memory::allocators::GLOBAL_ALLOCATOR;
+use core::alloc::GlobalAlloc;
+
 use crate::kernel_components::sync::Mutex;
 use crate::{Vec, single};
 use core::fmt::Debug;
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::cell::{UnsafeCell, Cell};
 use core::ops::{Deref, DerefMut};
+
 
 /// A mechanism for one-time lazy initialization.
 ///
@@ -185,6 +189,16 @@ unsafe impl<T> Send for Once<T> {}
 unsafe impl<T, F> Sync for Single<T, F> {}
 unsafe impl<T, F> Send for Single<T, F> {}
 
+unsafe impl<A: GlobalAlloc> GlobalAlloc<> for Single<A> {
+    unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
+        self.deref().alloc(layout)
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: core::alloc::Layout) {
+        self.deref().dealloc(ptr, layout);
+    }
+}
+
 /// A macro to create global 'Once' instance.
 /// 
 /// Since the static needs to know data types, the output of closure that will be provided must be written
@@ -222,22 +236,38 @@ macro_rules! global_once {
 /// threads, it is better to wrap the static around mutex or other synchronization primitive.
 #[macro_export]
 macro_rules! single {
-    ($($name:ident: $type:ty = $init:expr);+ $(;)?) => {
+    (
+        $(#[$meta:meta])*
+        $($name:ident: $type:ty = $init:expr);+ $(;)?
+    ) => {
+        $(#[$meta])*
         $(
             static $name: $crate::kernel_components::structures::Single<$type> = $crate::kernel_components::structures::Single::new(|| $init);
         )+
     };
-    ($(pub $name:ident: $type:ty = $init:expr);+ $(;)?) => {
+    (
+        $(#[$meta:meta])*
+        $(pub $name:ident: $type:ty = $init:expr);+ $(;)?
+    ) => {
+        $(#[$meta])*
         $(
             pub static $name: $crate::kernel_components::structures::Single<$type> = $crate::kernel_components::structures::Single::new(|| $init);
         )+
     };
-    ($(mut $name:ident: $type:ty = $init:expr);+ $(;)?) => {
+    (
+        $(#[$meta:meta])*
+        $(mut $name:ident: $type:ty = $init:expr);+ $(;)?
+    ) => {
+        $(#[$meta])*
         $(
             pub static mut $name: $crate::kernel_components::structures::Single<$type> = $crate::kernel_components::structures::Single::new(|| $init);
         )+
     };
-    ($(pub mut $name:ident: $type:ty = $init:expr);+ $(;)?) => {
+    (
+        $(#[$meta:meta])*
+        $(pub mut $name:ident: $type:ty = $init:expr);+ $(;)?
+    ) => {
+        $(#[$meta])*
         $(
             pub static mut $name: $crate::kernel_components::structures::Single<$type> = $crate::kernel_components::structures::Single::new(|| $init);
         )+
