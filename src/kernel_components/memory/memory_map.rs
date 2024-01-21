@@ -4,9 +4,11 @@ use core::marker::PhantomData;
 use core::mem;
 use core::ops::Deref;
 
+use alloc::vec::Vec;
+use alloc::boxed::Box;
+
 use proc_macros::Iternum;
-use crate::{Vec, AsBytes};
-use crate::kernel_components::structures::boxed::BoxedDst;
+use crate::AsBytes;
 
 use super::tags::{TagTrait, TagType, TagTypeId, Tag};
 
@@ -36,16 +38,18 @@ pub struct MemoryMapTag {
 
 impl MemoryMapTag {
     /// Creates a new memory map tag.
-    pub fn new(areas: &[MemoryArea]) -> BoxedDst<Self> {
+    pub fn new(areas: &[MemoryArea]) -> Box<Self> {
         let entry_size: u32 = mem::size_of::<MemoryArea>().try_into().unwrap();
         let entry_version: u32 = 0;
-        let mut bytes = Vec::from_array(&[entry_size.as_bytes(), entry_version.as_bytes()]);
+        let mut bytes = Vec::from([entry_size.as_bytes(), entry_version.as_bytes()]);
 
         for area in areas {
             bytes.push(area.as_bytes());
         }
 
-        BoxedDst::new_tag_dst(bytes.as_bytes().into())
+        unsafe { 
+            mem::transmute(bytes.into_boxed_slice())
+        }
     }
 
     /// Returns the entry size.
