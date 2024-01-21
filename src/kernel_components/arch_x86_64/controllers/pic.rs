@@ -3,12 +3,13 @@
 /// This is a virtualization of the Intel 8259 programmable interrupt controller. For real
 /// OS development is better to use the APIC instead.
 
-use crate::{single, Vec, bitflags};
+use alloc::vec::Vec;
+
+use crate::{single, bitflags};
 use crate::kernel_components::sync::Mutex;
 use crate::kernel_components::arch_x86_64::ports::{GenericPort, PortAccessType};
 use crate::kernel_components::arch_x86_64::post::DEBUG_BOARD;
 use super::pic_command_words::{ICW1, ICW3, ICW4, OCW2, OCW3};
-
 
 /// A struct, representing the individual PIC chip.
 /// 
