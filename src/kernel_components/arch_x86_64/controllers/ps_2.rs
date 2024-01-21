@@ -1,9 +1,9 @@
 /// A module that provides interactions with PS/2 controller.
 
-use crate::{
-    kernel_components::arch_x86_64::ports::{GenericPort, PortAccessType}, 
-    bitflags, Vec
-};
+use alloc::vec::Vec;
+
+use crate::kernel_components::arch_x86_64::ports::{GenericPort, PortAccessType};
+use crate::bitflags;
 
 /// A struct representing a 8042 PS/2 controller.
 /// 
