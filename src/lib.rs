@@ -126,7 +126,7 @@ pub mod kernel_components {
 
         pub use descriptor_table::DTPointer;
         pub use privilege_rings::PrivilegeLevel;
-        pub use random::{Random, RdRand, RdSeed};
+        pub use random::{RdRand, RdSeed};
     }
 
     pub mod registers {
