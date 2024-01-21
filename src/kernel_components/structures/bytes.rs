@@ -1,5 +1,7 @@
 /// A byte representation
 
+use alloc::vec::Vec;
+
 use core::{ptr, mem, ops::Deref};
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Ord, Eq)]
@@ -32,6 +34,9 @@ impl<'a> Into<&'a [u8]> for Bytes<'a> {
         self.0.as_ref()
     }
 }
+
+/// As bytes transmutation for built in vector struct.
+impl<T> AsBytes for Vec<T> {}
 
 /// A trait that provide some DST's to be used within different functions.
 /// 
