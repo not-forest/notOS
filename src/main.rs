@@ -69,7 +69,7 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
         FREE_LIST_ALLOC.change_strategy(
             notOS::kernel_components::memory::allocators::free_list_alloc::SearchStrategy::BEST_FIT
         );
-    
+   
         // New MMU structure makes it easier to handle memory related commands.
         MEMORY_MANAGEMENT_UNIT.init(_multiboot_information_address);
     };
@@ -113,8 +113,8 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
 
         // Interrupt gates.
         let gate_timer = GateDescriptor::new_interrupt(TIMER_INTERRUPT);
-        let gate_keyboard = GateDescriptor::new_interrupt(KEYBOARD_INTERRUPT);
 
+        let gate_keyboard = GateDescriptor::new_interrupt(KEYBOARD_INTERRUPT);
         // Pushing the gates into the IDT.
         INTERRUPT_DESCRIPTOR_TABLE.push(0, gate_div);
         INTERRUPT_DESCRIPTOR_TABLE.push(3, gate_break);
@@ -133,10 +133,10 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
         use notOS::kernel_components::task_virtualization::{Process, PROCESS_MANAGEMENT_UNIT};
 
         let stack = MEMORY_MANAGEMENT_UNIT.allocate_stack(6).unwrap();
-        
+
         let p1 = Process::new(
             stack, 
-            1024, 
+            1024,
             1,
             None,
             |t| {
