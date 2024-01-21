@@ -7,14 +7,14 @@
 /// reused across the application.
 
 use crate::kernel_components::memory::allocators::GLOBAL_ALLOCATOR;
-use core::alloc::GlobalAlloc;
-
 use crate::kernel_components::sync::Mutex;
-use crate::{Vec, single};
-use core::fmt::Debug;
+use crate::single;
+
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::cell::{UnsafeCell, Cell};
 use core::ops::{Deref, DerefMut};
+use core::alloc::GlobalAlloc;
+use core::fmt::Debug;
 
 
 /// A mechanism for one-time lazy initialization.
