@@ -52,21 +52,6 @@ pub mod kernel_components {
         pub mod bytes;
         pub mod bitflags;
 
-        pub mod boxed {
-            pub mod boxed_dst;
-
-            pub use boxed_dst::BoxedDst;
-        }
-
-        pub mod vectors {
-            pub mod vector;
-            pub mod iterators;
-            pub mod raw_vector;
-
-            pub use vector::Vec;
-            pub use iterators::{IntoIter, Drain};
-        }
-
         pub mod thread_safe {
             pub mod concurrent_list;
             pub mod concurrent_queue;
@@ -213,9 +198,6 @@ pub use kernel_components::{
     
     structures::{
         bytes::{Bytes, AsBytes},
-        vectors::Vec,
-        boxed::BoxedDst,
-        
         thread_safe,
     },
 
