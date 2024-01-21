@@ -3,12 +3,14 @@
 use super::thread::{Thread, ThreadFn, ThreadOutput};
 use super::ROUND_ROBIN;
 
+use alloc::vec::Vec;
+
 use core::ops::{Deref, DerefMut, Drop};
 use core::fmt::Debug;
 use core::mem;
 
-use crate::{Vec, GLOBAL_ALLOCATOR};
-use crate::kernel_components::arch_x86_64::RdRand;
+use crate::GLOBAL_ALLOCATOR;
+use crate::kernel_components::arch_x86_64::{RdRand, RdSeed};
 use crate::kernel_components::memory::stack_allocator::Stack;
 use crate::kernel_components::structures::thread_safe::ConcurrentList;
 
@@ -48,7 +50,8 @@ pub enum ProcState {
 pub struct Process<'a> {
     /// Universal process id.
     pub(crate) pid: usize,
-    /// Overall memory size of the process.
+    /// Overall heap memory size of the process. This amount could be changed if the process will
+    /// ask for more memory region.
     pub memory_size: usize,
     
     /// Process' stack.
@@ -77,7 +80,7 @@ impl<'a> Process<'a> {
         F: ThreadFn
     {
         let mut p = Self {
-            stack: stack,
+            stack,
             memory_size,
     
             pid,
@@ -103,7 +106,7 @@ impl<'a> Process<'a> {
                                 .map(|item| item.tid)
                                 .collect();        
         let mut thread_id = 0;
-        
+       
         // Making sure the id is individual.
         loop {
             if !threads_ids.contains(&thread_id) {
@@ -148,10 +151,5 @@ impl<'a> Process<'a> {
             index += 1;
         }
         None
-    }
-
-    /// Entering the main thread inside the process.
-    pub fn run() {
-
     }
 }
