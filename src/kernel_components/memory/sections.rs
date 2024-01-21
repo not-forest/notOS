@@ -3,13 +3,15 @@
 
 use core::fmt::{Debug, Formatter};
 use core::marker::PhantomData;
-use core::mem;
 use core::str::Utf8Error;
 use core::ops::{Deref, DerefMut};
+use core::mem;
+
+use alloc::vec::Vec;
+use alloc::boxed::Box;
 
 use proc_macros::Iternum;
-use crate::{Vec, AsBytes, bitflags};
-use crate::kernel_components::structures::boxed::BoxedDst;
+use crate::{AsBytes, bitflags};
 
 use super::tags::{TagTrait, TagType, TagTypeId, Tag};
 
@@ -34,15 +36,17 @@ impl SectionsTag {
         entry_size: u32,
         shndx: u32,
         sections: &[u8],
-    ) -> BoxedDst<Self> {
-        let mut bytes = Vec::from_array(&[
+    ) -> Box<Self> {
+        let mut bytes = Vec::from([
             num_of_sections.as_bytes(),
             entry_size.as_bytes(),
             shndx.as_bytes()
         ]);
         bytes.push(sections.into());
-
-        BoxedDst::new_tag_dst(bytes.as_bytes().into())
+        
+        unsafe { 
+            mem::transmute(bytes.into_boxed_slice())
+        }
     }
 
     /// Returns an iterator of loaded ELF sections.
