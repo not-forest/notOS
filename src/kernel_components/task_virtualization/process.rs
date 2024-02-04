@@ -1,7 +1,7 @@
 /// This is an abstraction over the jobs which are done in the OS.
 
 use super::thread::{Thread, ThreadFn, ThreadOutput};
-use super::ROUND_ROBIN;
+use super::PRIORITY_SCHEDULER;
 
 use alloc::vec::Vec;
 
@@ -53,7 +53,9 @@ pub struct Process<'a> {
     /// Overall heap memory size of the process. This amount could be changed if the process will
     /// ask for more memory region.
     pub memory_size: usize,
-    
+    /// Priority number of the underline process. It should range from 0 to 127, where 0 is the
+    /// most significant process.
+    pub priority: u8,
     /// Process' stack.
     pub(crate) stack: Stack,
     /// Current state of the process.
@@ -74,6 +76,7 @@ impl<'a> Process<'a> {
         stack: Stack,
         memory_size: usize, 
         pid: usize,
+        priority: u8,
         parent_process: Option<&'a Process<'a>>,
         main_function: F,
     ) -> Self where
@@ -82,6 +85,7 @@ impl<'a> Process<'a> {
         let mut p = Self {
             stack,
             memory_size,
+            priority,
     
             pid,
             proc_state: ProcState::INITIAL,
@@ -126,7 +130,7 @@ impl<'a> Process<'a> {
         unsafe {
             // The new thread must be append to the scheduler right away. TODO! Add a more advanced
             // way to append the thread to the scheduler, based on it's status.
-            ROUND_ROBIN.append_thread(&thread);
+            PRIORITY_SCHEDULER.append_thread(&thread);
             // Finally push the thread to the list for future contain.
             self.threads.push(thread);
         }
