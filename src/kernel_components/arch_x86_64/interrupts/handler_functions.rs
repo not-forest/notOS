@@ -146,7 +146,7 @@ pub mod predefined {
 pub mod software {
     use crate::kernel_components::arch_x86_64::interrupts;
     use crate::kernel_components::memory::EntryFlags;
-    use crate::kernel_components::task_virtualization::Thread;
+    use crate::kernel_components::task_virtualization::{Thread, PRIORITY_SCHEDULER, Scheduler};
     use crate::{println, print, debug, Color};
     use crate::kernel_components::arch_x86_64::controllers::{
         PROGRAMMABLE_INTERRUPT_CONTROLLER,
@@ -157,7 +157,11 @@ pub mod software {
     #[no_mangle]
     unsafe extern "x86-interrupt" fn timer_interrupt_handler(mut stack_frame: InterruptStackFrame) {
         use crate::kernel_components::task_virtualization::{
-            ROUND_ROBIN, Scheduler, PROCESS_MANAGEMENT_UNIT, ThreadFn, Thread,
+            Scheduler, ROUND_ROBIN, PRIORITY_SCHEDULER, 
+
+            PROCESS_MANAGEMENT_UNIT, 
+
+            ThreadFn, Thread,
             ThreadState, ProcState,
         };
 
@@ -176,7 +180,7 @@ pub mod software {
         // of that thread.
         interrupts::with_int_disabled(|| {
             // Trying to obtain some tasks from a scheduler if some.
-            if let Some(task) = ROUND_ROBIN.schedule() {
+            if let Some(task) = PRIORITY_SCHEDULER.schedule() {
                 // //println!("{:#x?}", task);
                 // Trying to find the process by task's pid.
                 //
@@ -253,12 +257,21 @@ pub mod software {
     /// as a mutable reference argument. This function must be divergent, because we are never
     /// calling it ourselves but only jumping to it's address.
     unsafe fn task_switch_call(t: &mut Thread) -> ! {
+        use crate::kernel_components::task_virtualization::{PriorityScheduler, Task};
+
         let closure = &t.fun;
 
+        // Running the closure of the thread.
         closure(
             mem::transmute(
                 t as *const _ as usize
             )
+        );
+
+        // The PC will get here once the task is done. At this moment the task is
+        // not needed anymore and can be removed.
+        PRIORITY_SCHEDULER.delete(
+            Task { pid: t.pid, tid: t.tid }
         );
 
         loop {}
