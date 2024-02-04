@@ -172,6 +172,7 @@ pub mod kernel_components {
     pub mod task_virtualization {
         pub mod scheduler;
         pub mod round_robin;
+        pub mod priority_based_scheduling;
         
         pub mod process;
         pub mod thread;
@@ -183,6 +184,7 @@ pub mod kernel_components {
         pub use scheduler::{Scheduler, Task};
 
         pub use round_robin::{ROUND_ROBIN, RoundRobin};
+        pub use priority_based_scheduling::{PRIORITY_SCHEDULER, PriorityScheduler};
     }
 
 }
