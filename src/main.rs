@@ -132,33 +132,38 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
     
         use notOS::kernel_components::task_virtualization::{Process, PROCESS_MANAGEMENT_UNIT};
 
-        let stack = MEMORY_MANAGEMENT_UNIT.allocate_stack(6).unwrap();
+        let stack1 = MEMORY_MANAGEMENT_UNIT.allocate_stack(6).unwrap();
+        let stack2 = MEMORY_MANAGEMENT_UNIT.allocate_stack(3).unwrap();
 
-        let p1 = Process::new(
-            stack, 
-            1024,
-            1,
-            None,
-            |t| {
-                use notOS::Color;
-                println!(Color::CYAN; "Data transfering:");
+        let p1 = Process::new(stack1, 0, 1, 0, None,
+            |_t| {
+                use notOS::{Color, println, print};
 
-                let my_data = 0xdeadbee;
-
-                t.spawn(move |_t| {
-                    println!(Color::YELLOW; "Here is my data: {:#x}", my_data);
-                });
-
-                println!(Color::CYAN; "Looks like i've lost my data ;(");
+                println!(Color::YELLOW; "I am the system level process! Doing some important calculations:");
+                
+                for i in 0..10000 {
+                    print!(Color::LIGHTGREEN; "{} ", i);
+                }
             },
+        );
+
+        let p2 = Process::new(stack2, 0, 2, 100, None,
+            |_t| {
+                use notOS::Color;
+
+                println!(Color::BLUE; "I am some useless user level process!");
+            }
         );
 
         // Pushing the process to the queue.
         PROCESS_MANAGEMENT_UNIT.queue(p1);
+        PROCESS_MANAGEMENT_UNIT.queue(p2);
 
         // Enabling software interrupts.
         interrupts::enable();
     }
 
-    loop {}
+    loop {
+        interrupts::hlt();
+    }
 }
