@@ -126,11 +126,11 @@ impl<A: Allocator> PMUList<A> {
         }
 
         while let Some(node) = unsafe { (next as *mut PMUListNode).as_mut() } {
+            next = node.next;
+        
             if node.next == 0 {
                 node.next = ptr as usize;
             }
-        
-            next = node.next;
         }
 
         self.len += 1;
