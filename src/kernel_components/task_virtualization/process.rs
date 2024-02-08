@@ -1,7 +1,7 @@
 /// This is an abstraction over the jobs which are done in the OS.
 
 use super::thread::{Thread, ThreadFn, ThreadOutput};
-use super::PRIORITY_SCHEDULER;
+use super::{PRIORITY_SCHEDULER, ROUND_ROBIN, PROCESS_MANAGEMENT_UNIT};
 
 use alloc::vec::Vec;
 
@@ -10,6 +10,7 @@ use core::fmt::Debug;
 use core::mem;
 
 use crate::GLOBAL_ALLOCATOR;
+use crate::kernel_components::arch_x86_64::interrupts::interrupt;
 use crate::kernel_components::arch_x86_64::{RdRand, RdSeed};
 use crate::kernel_components::memory::stack_allocator::Stack;
 use crate::kernel_components::structures::thread_safe::ConcurrentList;
@@ -80,7 +81,7 @@ impl<'a> Process<'a> {
         parent_process: Option<&'a Process<'a>>,
         main_function: F,
     ) -> Self where
-        F: ThreadFn
+        F: ThreadFn + core::marker::Send   
     {
         let mut p = Self {
             stack,
@@ -93,7 +94,32 @@ impl<'a> Process<'a> {
     
             threads: ConcurrentList::new(unsafe {&mut GLOBAL_ALLOCATOR }),
         };
-        p.spawn(main_function); // The main function must spawn the new thread right away.
+        // Adding some custom code on top of the recieved function.
+        //
+        // As a main thread, it must clear up the whole process after itself, which basically means
+        // marking the process' state as FINAL.
+        unsafe {
+            interrupt::with_int_disabled(|| {
+                p.spawn(move |t: &mut Thread| {
+                    // Getting a process as a resource still must be fair even at this point.
+                    interrupt::with_int_disabled(|| {
+                        PROCESS_MANAGEMENT_UNIT.process_list
+                            .lock()
+                            .get_mut(t.pid)
+                            .unwrap().proc_state = ProcState::RUNNING; // Marking the process as running.
+                    });
+                    
+                    main_function(t);
+
+                    interrupt::with_int_disabled(|| {
+                        PROCESS_MANAGEMENT_UNIT.process_list
+                            .lock()
+                            .get_mut(t.pid)
+                            .unwrap().proc_state = ProcState::FINAL; // Marking the process finished.
+                    });
+                });
+            }); // The main function must spawn the new thread right away
+        }
         p
     }
 
@@ -130,7 +156,7 @@ impl<'a> Process<'a> {
         unsafe {
             // The new thread must be append to the scheduler right away. TODO! Add a more advanced
             // way to append the thread to the scheduler, based on it's status.
-            PRIORITY_SCHEDULER.append_thread(&thread);
+            ROUND_ROBIN.append_thread(&thread);
             // Finally push the thread to the list for future contain.
             self.threads.push(thread);
         }
@@ -155,5 +181,11 @@ impl<'a> Process<'a> {
             index += 1;
         }
         None
+    }
+}
+
+impl<'a> Drop for Process<'a> {
+    fn drop(&mut self) {
+        self.threads.clear();
     }
 }
