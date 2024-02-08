@@ -4,7 +4,7 @@ use crate::kernel_components::structures::thread_safe::ConcurrentQueue;
 use crate::kernel_components::memory::allocators::{GAllocator, GLOBAL_ALLOCATOR};
 use crate::kernel_components::sync::Mutex;
 use crate::single;
-use super::{Process, Task, Thread};
+use super::{Process, ProcState, Task, Thread};
 
 use core::alloc::{GlobalAlloc, Allocator, Layout};
 use core::mem::{self, MaybeUninit, ManuallyDrop};
@@ -53,10 +53,30 @@ impl<'a> PMU<'a> {
         self.process_queue.enqueue(proc);
     }
 
+    /// Dequeues the process that was first to come.
+    ///
+    /// The queue within the PMU is a FIFO queue, therefore it is first come first served.
+    /// TODO! make privileged process appear faster in the queue.
     pub fn dequeue(&mut self) {
         if let Some(dec) = self.process_queue.dequeue() {
             self.process_list.lock().push_rand(dec);
         }
+    }
+
+    /// Removes the process from the list. This function frees the heap memory by deallocating
+    /// memory left from the process. It must be called when the process' main thread exited
+    /// normally or any other local thread is aborted.
+    ///
+    /// Works as a wrapper for process_list.lock().remove_proc(pid)
+    pub fn remove(&mut self, pid: usize) -> Result<(), ()> {
+        self.process_list.lock().remove_proc(pid)
+    }
+
+    /// Checks for halted, finished or aborted processes and does the cleaning.
+    pub fn cleanup(&mut self) {
+        let mut pid = 0; 
+        // It will try to clean the processes until it gets one.
+        while let Err(()) = self.remove(pid) {pid += 1}
     }
 }
 
@@ -74,7 +94,7 @@ impl<A: Allocator> PMUList<A> {
         let mut next = self.head;
         while let Some(node) = unsafe { (next as *const PMUListNode).as_ref() } {
             if node.process.pid == pid {
-                return Some(node.obtain_proc())
+                return Some(node.get_proc())
             }
             next = node.next;
         }
@@ -88,7 +108,7 @@ impl<A: Allocator> PMUList<A> {
         while let Some(node) = unsafe { (next as *mut PMUListNode).as_mut() } {
             // crate::println!("{:#x?}, {}", node.process, pid);
             if node.process.pid == pid {
-                return Some(node.obtain_proc_mut())
+                return Some(node.get_proc_mut())
             }
             next = node.next;
         }
@@ -133,12 +153,37 @@ impl<A: Allocator> PMUList<A> {
             }
         }
 
-        self.len += 1;
+        self.len.saturating_add(1);
     }
 
     /// Removes the process from the list based my it's pid.
-    pub fn remove_proc(&mut self, pid: usize) {
-        unimplemented!()
+    ///
+    /// # Note
+    ///
+    /// This function will return Ok(()) if it will manage to find the desired process under the
+    /// provided pid, not necessary to remove it.
+    pub fn remove_proc(&mut self, pid: usize) -> Result<(), ()> {
+        let mut next = self.head;
+
+        while let Some(node) = unsafe { (next as *mut PMUListNode).as_mut() } {
+            // Searching for the process.
+            if node.process.pid == pid {
+                // Doing some changes based on the current state of the process.
+                match node.process.proc_state {
+                    ProcState::FINAL => {
+                        node.node_dealloc(self.alloc);
+                        self.len.saturating_sub(1);
+                    },
+                    _ => (),
+                }
+                
+                return Ok(())
+            }
+
+            next = node.next;
+        }
+
+        Err(())
     }
 
     /// Returns the current amount of processes running.
@@ -155,20 +200,26 @@ struct PMUListNode<'a> {
 impl<'a> PMUListNode<'a> {
     /// Returns the item from the node as reference.
     #[inline]
-    pub fn obtain_proc(&self) -> &Process<'a> {
+    pub fn get_proc(&self) -> &Process<'a> {
         &self.process
     }
 
     /// Returns the item from the node as mutable.
     #[inline]
-    pub fn obtain_proc_mut(&mut self) -> &mut Process<'a> {
+    pub fn get_proc_mut(&mut self) -> &mut Process<'a> {
         &mut self.process
+    }
+
+    /// Returns the process within the node with it's ownershipment.
+    #[inline]
+    pub fn obtain_proc(self) -> Process<'a> {
+        self.process
     }
 
     /// Just allocates the node to some random place on the heap.
     /// 
     /// Returns a pointer to the location.
-    fn node_alloc<A>(node: Self, alloc: &A) -> *mut Self where A: Allocator {
+    fn node_alloc<A>(node: Self, alloc: &mut A) -> *mut Self where A: Allocator {
         let content_size = mem::size_of::<Self>();
         let content_align = mem::align_of::<Self>();
         let layout = Layout::from_size_align(content_size, content_align).unwrap();
@@ -182,10 +233,12 @@ impl<'a> PMUListNode<'a> {
     }
 
     // Deallocates the node at given ptr
-    fn node_dealloc<A>(&mut self, alloc: &A) where A: Allocator {
+    fn node_dealloc<A>(&mut self, alloc: &mut A) where A: Allocator {
         let content_size = mem::size_of::<Self>();
         let content_align = mem::align_of::<Self>();
         let layout = Layout::from_size_align(content_size, content_align).unwrap();
+
+        self.process.threads.clear();
 
         unsafe { alloc.deallocate(
             NonNull::new(self as *mut Self as *mut u8).unwrap(),
