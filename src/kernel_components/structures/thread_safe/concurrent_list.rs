@@ -431,6 +431,16 @@ impl<T, A: Allocator> ConcurrentList<T, A> {
         self.remove(0);
     }
 
+    /// Clears the list completely.
+    ///
+    /// Could be used before for dropping where ownershipment is not an option. If dropping
+    /// manually is an option, use regular drop function.
+    pub fn clear(&mut self) {
+        for _ in 0..self.len() {
+            self.pop_front()
+        }
+    }
+
     /// Returns a length of the list.
     pub fn len(&self) -> usize {
         self.len.load(Ordering::Acquire)
