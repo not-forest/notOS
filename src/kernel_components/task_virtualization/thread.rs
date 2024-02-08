@@ -8,6 +8,8 @@ use core::mem;
 
 use alloc::boxed::Box;
 
+use crate::kernel_components::arch_x86_64::interrupts;
+
 use super::{Process, PROCESS_MANAGEMENT_UNIT};
 
 /// A custom trait for thread functions.
@@ -128,12 +130,17 @@ impl Thread {
     /// # Warn
     /// 
     /// This behavior can be recursive of course and could cause some issues.
-    pub fn spawn(&self, thread_function: impl ThreadFn + 'static) {
+    pub fn spawn<F>(&self, thread_function: F) where 
+        F: ThreadFn
+    {
         unsafe {
-            let mut list = PROCESS_MANAGEMENT_UNIT.process_list.lock();
-            list.get_mut(self.pid)
-                .unwrap()
-                .spawn(thread_function);
+            interrupts::with_int_disabled(|| {
+                PROCESS_MANAGEMENT_UNIT.process_list
+                    .lock()
+                    .get_mut(self.pid)
+                    .unwrap()
+                    .spawn(thread_function);
+            });
         }
     }
 }
