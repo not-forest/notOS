@@ -87,8 +87,18 @@ impl Scheduler for PriorityScheduler {
 
             return Some(current_task)
         }
-        self.current_task.fetch_add(1, Ordering::SeqCst);
 
+        let index = self.current_task.fetch_add(1, Ordering::SeqCst);
+
+        if index + 1 >= self.list.len() {
+            self.current_task.compare_exchange(
+                index + 1, 
+                0, 
+                Ordering::SeqCst, 
+                Ordering::Relaxed,
+            );
+        }
+        
         None
     }
 
