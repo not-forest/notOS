@@ -144,9 +144,9 @@ pub mod predefined {
 /// For any of this function, the interrupt controller must be reprogrammed to the desired
 /// interrupt vector. Every handler function entry must be 
 pub mod software {
-    use crate::kernel_components::arch_x86_64::interrupts;
+    use crate::kernel_components::arch_x86_64::interrupts::{self, interrupt};
     use crate::kernel_components::memory::EntryFlags;
-    use crate::kernel_components::task_virtualization::{Thread, PRIORITY_SCHEDULER, Scheduler};
+    use crate::kernel_components::task_virtualization::{Thread, Scheduler, PROCESS_MANAGEMENT_UNIT, PRIORITY_SCHEDULER, ROUND_ROBIN};
     use crate::{println, print, debug, Color};
     use crate::kernel_components::arch_x86_64::controllers::{
         PROGRAMMABLE_INTERRUPT_CONTROLLER,
@@ -180,8 +180,8 @@ pub mod software {
         // of that thread.
         interrupts::with_int_disabled(|| {
             // Trying to obtain some tasks from a scheduler if some.
-            if let Some(task) = PRIORITY_SCHEDULER.schedule() {
-                // //println!("{:#x?}", task);
+            if let Some(task) = ROUND_ROBIN.schedule() {
+                // println!("{:#x?}", task);
                 // Trying to find the process by task's pid.
                 //
                 // If not exists, we can easily delete all tasks with this pid.
@@ -221,7 +221,13 @@ pub mod software {
                             // thread's function was already once called.
                             stack_frame.instruction_pointer = new_ip;
                         }
+                    } else {
+                        // If there are no underlying threads we must delete the hangling task
+                        ROUND_ROBIN.delete(*task);
                     }
+                } else {
+                    // If there are no underlying process, we must delete the hangling task
+                    ROUND_ROBIN.delete(*task);
                 }
             }    
         });
@@ -259,7 +265,7 @@ pub mod software {
     unsafe fn task_switch_call(t: &mut Thread) -> ! {
         use crate::kernel_components::task_virtualization::{PriorityScheduler, Task};
 
-        let closure = &t.fun;
+        let closure = t.fun.as_ref();
 
         // Running the closure of the thread.
         closure(
@@ -268,11 +274,18 @@ pub mod software {
             )
         );
 
-        // The PC will get here once the task is done. At this moment the task is
-        // not needed anymore and can be removed.
-        PRIORITY_SCHEDULER.delete(
-            Task { pid: t.pid, tid: t.tid }
-        );
+        interrupt::with_int_disabled(|| {
+            // The PC will get here once the task is done. At this moment the task is
+            // not needed anymore and can be removed.
+            ROUND_ROBIN.delete(
+                Task { pid: t.pid, tid: t.tid }
+            );
+        });
+
+        interrupt::with_int_disabled(|| {
+            // Checking for processes that are done executing their tasks:
+            PROCESS_MANAGEMENT_UNIT.cleanup();
+        });
 
         loop {}
     }
