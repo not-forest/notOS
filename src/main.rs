@@ -132,38 +132,37 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
     
         use notOS::kernel_components::task_virtualization::{Process, PROCESS_MANAGEMENT_UNIT};
 
-        let stack1 = MEMORY_MANAGEMENT_UNIT.allocate_stack(6).unwrap();
-        let stack2 = MEMORY_MANAGEMENT_UNIT.allocate_stack(3).unwrap();
+        let stack1 = MEMORY_MANAGEMENT_UNIT.allocate_stack(2).unwrap();
+        let stack2 = MEMORY_MANAGEMENT_UNIT.allocate_stack(2).unwrap();
 
-        let p1 = Process::new(stack1, 0, 1, 0, None,
-            |_t| {
-                use notOS::{Color, println, print};
-
-                println!(Color::YELLOW; "I am the system level process! Doing some important calculations:");
-                
-                for i in 0..10000 {
-                    print!(Color::LIGHTGREEN; "{} ", i);
+        let p1 = Process::new(stack1, 0, 1, 1, None,
+            |t| {
+                use notOS::Color;
+ 
+                for i in 1..5 {
+                    t.spawn(move |_t| {
+                        println!(Color::BLUE; "Hello from thread: {}", i);
+                    })
                 }
+
+                println!(Color::MAGENTA; "First process DONE!");
             },
         );
 
-        let p2 = Process::new(stack2, 0, 2, 100, None,
+        let p2 = Process::new(stack2, 0, 2, 2, None,
             |_t| {
                 use notOS::Color;
-
-                println!(Color::BLUE; "I am some useless user level process!");
+                println!(Color::YELLOW; "Second process. DONE!");
             }
         );
 
         // Pushing the process to the queue.
         PROCESS_MANAGEMENT_UNIT.queue(p1);
         PROCESS_MANAGEMENT_UNIT.queue(p2);
-
-        // Enabling software interrupts.
-        interrupts::enable();
     }
 
     loop {
-        interrupts::hlt();
+        // Waiting for interrupts to happen.
+        interrupts::wait_for_interrupt();
     }
 }
