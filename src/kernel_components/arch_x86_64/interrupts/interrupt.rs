@@ -85,6 +85,16 @@ pub fn breakpoint() {
     unsafe { asm!("int3", options(nomem, nostack)) }
 }
 
+/// A simple wrapper that enables interrupts and halts the processor until the interrupt happens.
+#[inline(always)]
+#[no_mangle]
+pub fn wait_for_interrupt() {
+    unsafe {
+        enable();
+        hlt();       
+    }
+}
+
 /// Divides a given integer by zero.
 /// 
 /// This function is only usable to test out the handler function, that must be called after such
