@@ -84,6 +84,7 @@ pub mod kernel_components {
             pub use interrupt::{
                 cause_interrupt, cause_interrupt_unsafe,
                 enable, disable, with_int_disabled, with_int_enabled,
+                wait_for_interrupt,
                 breakpoint, 
                 divide_by_zero, 
                 hlt
