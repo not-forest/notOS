@@ -56,6 +56,7 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
         handler_functions::predefined::*,
         handler_functions::software::*,
         INTERRUPT_DESCRIPTOR_TABLE,
+        InterruptVector, 
         GateDescriptor,
     };
 
@@ -115,14 +116,19 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
         let gate_timer = GateDescriptor::new_interrupt(TIMER_INTERRUPT);
 
         let gate_keyboard = GateDescriptor::new_interrupt(KEYBOARD_INTERRUPT);
-        // Pushing the gates into the IDT.
-        INTERRUPT_DESCRIPTOR_TABLE.push(0, gate_div);
-        INTERRUPT_DESCRIPTOR_TABLE.push(3, gate_break);
-        INTERRUPT_DESCRIPTOR_TABLE.push(8, gate_double_fault);
-        INTERRUPT_DESCRIPTOR_TABLE.push(14, gate_page_fault);
 
-        INTERRUPT_DESCRIPTOR_TABLE.push(32, gate_timer);
-        INTERRUPT_DESCRIPTOR_TABLE.push(33, gate_keyboard);
+        // Pushing the gates into the IDT.
+        INTERRUPT_DESCRIPTOR_TABLE.push(InterruptVector::DIVIDE_BY_ZERO, gate_div);
+        INTERRUPT_DESCRIPTOR_TABLE.push(InterruptVector::BREAKPOINT, gate_break);
+        INTERRUPT_DESCRIPTOR_TABLE.push(InterruptVector::DOUBLE_FAULT, gate_double_fault);
+        INTERRUPT_DESCRIPTOR_TABLE.push(InterruptVector::PAGE_FAULT, gate_page_fault);
+
+        INTERRUPT_DESCRIPTOR_TABLE.push(
+            InterruptVector::PICMappings(32), gate_timer
+        );
+        INTERRUPT_DESCRIPTOR_TABLE.push(
+            InterruptVector::PICMappings(33), gate_keyboard
+        );
 
         // Loading the IDT table to the CPU.
         INTERRUPT_DESCRIPTOR_TABLE.load_table();
@@ -132,33 +138,23 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
     
         use notOS::kernel_components::task_virtualization::{Process, PROCESS_MANAGEMENT_UNIT};
 
-        let stack1 = MEMORY_MANAGEMENT_UNIT.allocate_stack(2).unwrap();
-        let stack2 = MEMORY_MANAGEMENT_UNIT.allocate_stack(2).unwrap();
+        let stack1 = MEMORY_MANAGEMENT_UNIT.allocate_stack(1).unwrap();
 
         let p1 = Process::new(stack1, 0, 1, 1, None,
             |t| {
                 use notOS::Color;
  
-                for i in 1..5 {
-                    t.spawn(move |_t| {
-                        println!(Color::BLUE; "Hello from thread: {}", i);
-                    })
-                }
+                let handle = t.spawn(move |_t| {
+                    println!(Color::BLUE; "Hello from the inner thread!");
+                });
 
                 println!(Color::MAGENTA; "First process DONE!");
+                // handle.join();
             },
-        );
-
-        let p2 = Process::new(stack2, 0, 2, 2, None,
-            |_t| {
-                use notOS::Color;
-                println!(Color::YELLOW; "Second process. DONE!");
-            }
         );
 
         // Pushing the process to the queue.
         PROCESS_MANAGEMENT_UNIT.queue(p1);
-        PROCESS_MANAGEMENT_UNIT.queue(p2);
     }
 
     loop {
