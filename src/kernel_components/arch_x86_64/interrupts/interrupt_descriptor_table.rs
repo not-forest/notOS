@@ -1,3 +1,4 @@
+use crate::kernel_components::structures::IternumTrait;
 /// Module for IDT management.
 
 use crate::kernel_components::sync::Mutex;
@@ -9,6 +10,7 @@ use crate::kernel_components::arch_x86_64::{
     descriptor_table::{lidt, sidt},
 };
 use crate::{bitflags, single, VirtualAddress};
+use super::InterruptVector;
 use super::{
     handler_functions::predefined::*,
     HandlerFn,
@@ -59,7 +61,13 @@ impl IDT {
     /// 
     /// By pushing, it just means rewriting the empty entries as a new ones.
     #[inline]
-    pub fn push(&mut self, index: usize, gate: GateDescriptor) {
+    pub fn push(&mut self, index: InterruptVector, gate: GateDescriptor) {
+        // Just converting a C-like enum to regular usize.
+        let index = match index {
+            InterruptVector::Custom(num) | InterruptVector::APICMappings(num) | InterruptVector::PICMappings(num) => num,
+            _ => InterruptVector::get_index(index)
+        };
+
         assert!(index < 256, "Index is out of bounds.");
 
         self.table[index] = gate;
