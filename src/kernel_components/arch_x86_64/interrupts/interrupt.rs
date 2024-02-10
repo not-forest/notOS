@@ -3,7 +3,94 @@
 /// Exception catching are done with interrupt description table and handler functions.
 
 use core::arch::asm;
+use proc_macros::Iternum;
+
 use crate::kernel_components::registers::flags::{XFLAGS, XFLAGSFlags};
+
+/// INT vector table enum
+///
+/// This enum holds name for each interrupt handler which are mapped in the interrupt descriptor
+/// table. It includes hardware exceptions as well as software interrupts.
+#[derive(Iternum, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[allow(non_camel_case_types)]
+#[repr(usize)]
+pub enum InterruptVector {
+    // Hardware interrupts. (exceptions)
+    /// Interrupt vector number to handle division by zero.
+    DIVIDE_BY_ZERO = 0x0,
+    // The address 0x1 is reserved and should not be used.
+    
+    /// Interrupt vector number to handle division by zero. This interrupt is triggered when a division operation
+    /// encounters a divisor of zero, causing a divide-by-zero error.
+    NMI_INTERRUPT = 0x2,
+    /// Breakpoint exception. This interrupt is typically used for debugging purposes. When encountered,
+    /// it halts program execution to allow for debugging tools to inspect the program state.
+    BREAKPOINT = 0x3,
+    /// Overflow exception. This interrupt is triggered when an arithmetic operation results in a value that
+    /// exceeds the range representable by the data type, causing an overflow condition.
+    OVERFLOW = 0x4,
+    /// Bounds Check exception. This interrupt is triggered when an array index or pointer exceeds the
+    /// bounds of the defined range, indicating a memory access violation.
+    BOUNDS_OF_RANGE_EXCEPTIONS = 0x5,
+    /// Invalid Opcode exception. This interrupt occurs when the processor encounters an undefined or
+    /// unrecognized instruction during execution.
+    INVALID_OPCODE = 0x6,
+    /// Device Not Available exception. This interrupt is raised when an attempt is made to access a hardware
+    /// device that is not available or accessible at the specified address.
+    DEVICE_NOT_ABAILABLE = 0x7,
+    /// Double Fault exception. This interrupt occurs when an exception is encountered while processing a prior
+    /// exception, indicating a severe system error that may require a system restart.
+    DOUBLE_FAULT = 0x8,
+    /// Coprocessor Segment Overrun exception. This interrupt is triggered when there is a segmentation fault
+    /// related to coprocessor operations, typically in older x86 systems.
+    COPROCESSOR_SEGMENT_OVERRUN = 0x9,
+    /// Invalid Task State Segment exception. This interrupt occurs when the processor encounters an invalid
+    /// Task State Segment (TSS) while attempting to switch tasks.
+    INVALID_TSS = 0xa,
+    /// Segment Not Present exception. This interrupt is raised when an attempt is made to access a memory
+    /// segment that is marked as not present in the system's memory management tables.
+    SEGMENT_NOT_PRESENT = 0xb,
+    /// Stack Segment Fault exception. This interrupt occurs when there is an error related to the stack segment,
+    /// such as stack underflow or stack overflow.
+    STACK_SEGMENT_FAULT = 0xc,
+    /// General Protection Fault exception. This interrupt is raised when an attempt is made to access protected
+    /// memory or perform privileged operations without the necessary permissions.
+    GENERAL_PROTECTION_FAULT = 0xd,
+    /// Page Fault exception. This interrupt is raised when a memory access fails due to a page-level protection
+    /// violation or when accessing a page that is not currently present in physical memory.
+    PAGE_FAULT = 0xe,
+
+    // The address 0xf is reserved and should not be used.
+    
+    /// x87 FPU Error exception. This interrupt occurs when there is an error during the execution of a
+    /// floating-point operation using the x87 FPU (Floating Point Unit).
+    X87_FPU_ERROR = 0x10,
+    /// Alignment Check exception. This interrupt is triggered when an unaligned memory access is attempted,
+    /// which may result in performance penalties or system instability on architectures that do not support
+    /// unaligned memory accesses.
+    ALIGNMENT_CHECK = 0x11,
+    /// Machine Check exception. This interrupt is raised when the processor detects an unrecoverable hardware
+    /// error or inconsistency, indicating a serious system failure.
+    MACHINE_CHECK = 0x12,
+    /// SIMD Floating Point Exception. This interrupt occurs when there is an error during the execution of
+    /// SIMD (Single Instruction, Multiple Data) floating-point instructions.
+    SIMD_FLOATING_POINT_EXCEPTION = 0x13,
+
+    // Addresses 0x14 - 0x1f are reserved and must not be used.
+
+    // Software interrupts (Mapped by PIC or APIC.)
+    //
+    // Those mappings are OS specific, even though those values are used most of the time.
+    
+    /// Mappings that are specific for PIC controller.
+    PICMappings(usize),
+    
+    /// Mappings that are specific for APIC controller. (TODO! add the APIC controller support.)
+    APICMappings(usize),
+
+    /// Custom mappings for OS specific software interrupts.
+    Custom(usize),
+}
 
 /// Enables interrupts.
 #[inline(always)]
