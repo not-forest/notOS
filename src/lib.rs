@@ -82,6 +82,7 @@ pub mod kernel_components {
             pub use handler_functions::HandlerFn;
             pub use interrupt_descriptor_table::{GateDescriptor, IDT, GateType, INTERRUPT_DESCRIPTOR_TABLE};
             pub use interrupt::{
+                InterruptVector,
                 cause_interrupt, cause_interrupt_unsafe,
                 enable, disable, with_int_disabled, with_int_enabled,
                 wait_for_interrupt,
@@ -177,12 +178,14 @@ pub mod kernel_components {
         
         pub mod process;
         pub mod thread;
+        pub mod join_handle;
         pub mod pmu;
 
         pub use pmu::{PMU, PROCESS_MANAGEMENT_UNIT};
         pub use process::{Process, ProcState};
-        pub use thread::{Thread, ThreadFn, ThreadOutput, ThreadState};
+        pub use thread::{Thread, ThreadFn, ThreadState};
         pub use scheduler::{Scheduler, Task};
+        //pub use join_handle::JoinHandle;
 
         pub use round_robin::{ROUND_ROBIN, RoundRobin};
         pub use priority_based_scheduling::{PRIORITY_SCHEDULER, PriorityScheduler};
