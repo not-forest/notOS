@@ -138,18 +138,21 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
     
         use notOS::kernel_components::task_virtualization::{Process, PROCESS_MANAGEMENT_UNIT};
 
-        let stack1 = MEMORY_MANAGEMENT_UNIT.allocate_stack(1).unwrap();
+        let stack1 = MEMORY_MANAGEMENT_UNIT.allocate_stack(100).unwrap();
 
         let p1 = Process::new(stack1, 0, 1, 1, None,
             |t| {
                 use notOS::Color;
- 
-                let handle = t.spawn(move |_t| {
-                    println!(Color::BLUE; "Hello from the inner thread!");
+
+                let handle1 = t.spawn(move |_t| {
+                    println!(Color::BLUE; "Hello from the thread. Returning 42!");
+                
+                    42 
                 });
 
-                println!(Color::MAGENTA; "First process DONE!");
-                // handle.join();
+                println!(Color::MAGENTA; "First process is done, waiting for the threads.");
+                let output = handle1.join().ok().unwrap();
+                println!(Color::MAGENTA; "Obtained value: {}. Shutting down.", output);
             },
         );
 
