@@ -83,6 +83,7 @@ pub mod predefined {
     unsafe extern "x86-interrupt" fn double_fault_handler(stack_frame: InterruptStackFrame) {
         println!(Color::RED; "EXCEPTION: Double Fault");
         debug!(stack_frame);
+        loop {}
     }
 
     #[no_mangle]
@@ -144,16 +145,23 @@ pub mod predefined {
 /// For any of this function, the interrupt controller must be reprogrammed to the desired
 /// interrupt vector. Every handler function entry must be 
 pub mod software {
+    use alloc::boxed::Box;
+    use core::any::Any;
+
     use crate::kernel_components::arch_x86_64::interrupts::{self, interrupt};
     use crate::kernel_components::memory::EntryFlags;
-    use crate::kernel_components::task_virtualization::{Thread, Scheduler, PROCESS_MANAGEMENT_UNIT, PRIORITY_SCHEDULER, ROUND_ROBIN};
+    use crate::kernel_components::task_virtualization::{Thread, Scheduler, PROCESS_MANAGEMENT_UNIT, PRIORITY_SCHEDULER, ROUND_ROBIN, ThreadState};
     use crate::{println, print, debug, Color};
     use crate::kernel_components::arch_x86_64::controllers::{
         PROGRAMMABLE_INTERRUPT_CONTROLLER,
         PS2,
     };
     use super::*;
-    
+   
+    /// Software timer interrupt handler
+    ///
+    /// This handler calls the task switch function, which allows the PMU to perform the task
+    /// switching.
     #[no_mangle]
     unsafe extern "x86-interrupt" fn timer_interrupt_handler(mut stack_frame: InterruptStackFrame) {
         use crate::kernel_components::task_virtualization::{
@@ -189,6 +197,9 @@ pub mod software {
                     .lock()
                     .get_mut(task.pid) {
 
+                    // Changing the process' stack top based on the current stack pointer.
+                    process.stack.top = stack_frame.stack_ptr;
+                    
                     // Trying to find the thread by task's tid.
                     //
                     // If not exists, we can delete this specific task.
@@ -198,29 +209,30 @@ pub mod software {
                         let new_ip  = thread.instruction_ptr;
 
                         // Writting the old values to the thread.
-                        thread.stack_ptr = stack_frame.stack_ptr;   
+                        thread.stack_ptr = stack_frame.stack_ptr;
                         thread.instruction_ptr = stack_frame.instruction_pointer;
                         
                         // Changing the current stack pointer to the thread's ones.
                         stack_frame.stack_ptr = new_stack;
-                        
-                        if thread.thread_state == ThreadState::INIT {
-                            // If the thread is only about to run we must provide some additional information for it.
-                            //
-                            // This basically means that we must perform the fast-call calling convention manually, so the
-                            // thread can use a mutable reference to itself and perform the instructions.
-                            // interrupts::breakpoint();
-                            thread_input = thread as *const _ as usize;
-                            // Changing the state to running, which will not affect the thread's input.
-                            thread.thread_state = ThreadState::RUNNING;
+                        stack_frame.instruction_pointer = new_ip;
+                       
+                        match thread.thread_state {
+                            ThreadState::INIT => {
+                                // If the thread is only about to run we must provide some additional information for it.
+                                //
+                                // This basically means that we must perform the fast-call calling convention manually, so the
+                                // thread can use a mutable reference to itself and perform the instructions.
+                                thread_input = thread as *const _ as usize;
+                                // Changing the state to running, which will not affect the thread's input.
+                                thread.thread_state = ThreadState::RUNNING;
 
-                            // Changing the current instruction pointer to the helper function that will call the 
-                            stack_frame.instruction_pointer = task_switch_call as usize;
-                        } else {    
-                            // Chaning the current instruction pointer to the thread's instruction pointer, because the
-                            // thread's function was already once called.
-                            stack_frame.instruction_pointer = new_ip;
-                        }
+                                // Changing the thread state for the join handle.
+                                if let Some(o) = &mut thread.output {
+                                    o.change_state(ThreadState::RUNNING);
+                                }
+                            },
+                            _ => (),
+                        } 
                     } else {
                         // If there are no underlying threads we must delete the hangling task
                         ROUND_ROBIN.delete(*task);
@@ -262,17 +274,34 @@ pub mod software {
     /// This function calls the inner function of the thread and passes the thread itself
     /// as a mutable reference argument. This function must be divergent, because we are never
     /// calling it ourselves but only jumping to it's address.
-    unsafe fn task_switch_call(t: &mut Thread) -> ! {
-        use crate::kernel_components::task_virtualization::{PriorityScheduler, Task};
+    pub(crate) unsafe fn task_switch_call(t: &mut Thread) -> ! {
+        use crate::kernel_components::task_virtualization::{PriorityScheduler, Task, JoinHandle};
+        use core::mem;
 
         let closure = t.fun.as_ref();
 
         // Running the closure of the thread.
-        closure(
+        let output = closure(
             mem::transmute(
                 t as *const _ as usize
             )
         );
+
+        interrupt::with_int_disabled(|| {
+            // Marking the thread as done executing.
+            t.thread_state = ThreadState::FINAL;
+
+            // Writing the data to handle and removing the writer.
+            if let Some(o) = &mut t.output {
+                crate::println!("WRITING DATA!");
+                // Writing data
+                o.write(output);
+                // Changing the status
+                o.change_state(ThreadState::FINAL);
+                // Dropping the writer reference and living None on it's place.
+                drop(t.output.take());
+            }
+        });
 
         interrupt::with_int_disabled(|| {
             // The PC will get here once the task is done. At this moment the task is
@@ -290,6 +319,11 @@ pub mod software {
         loop {}
     }
 
+    /// Software keyboard interrupt handler
+    ///
+    /// This handler reads the data from the keyboard key that is pressed and puts it in a VGA
+    /// buffer. TODO! Abstract the keyboard handling and change the output buffer for the keyboard
+    /// controlls with other aplications in some queue style.
     #[no_mangle]
     unsafe extern "x86-interrupt" fn keyboard_interrupt_handler(stack_frame: InterruptStackFrame) {
         use crate::kernel_components::drivers::keyboards::GLOBAL_KEYBORD;
@@ -355,8 +389,7 @@ pub struct InterruptStackFrame {
 /// 
 /// It is important to know which type of error code is being used, when converting to the
 /// corresponding struct.
-#[derive(Debug, Clone, Copy, PartialEq,                         //interrupts::breakpoint();
-Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
 pub struct ErrorCode(pub u64);
 
