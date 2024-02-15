@@ -151,6 +151,20 @@ impl PIC {
         PIC::new(pic_offset, pic_offset + 8)
     }
 
+    /// Returns an offset, which was used when master chip was mapped within the IDT. If chips were
+    /// mapped in a chained way, this function is enough to get about all 16 interrupts location.
+    #[inline]
+    pub const fn get_master_offset(&self) -> u8 {
+        self.master.offset
+    }
+
+    /// Returns an offset, which was used when slave chip was mapped within the IDT. Must only be
+    /// used if the chips were not mapped in a chained way.
+    #[inline]
+    pub const fn get_slave_offset(&self) -> u8 {
+        self.slave.offset
+    }
+
     /// Creates a new instance of PIC controller.
     /// 
     /// The master offset and slave offset are two offsets that are pointing to the first
