@@ -104,6 +104,12 @@ pub unsafe fn disable() {
     unsafe { asm!("cli", options(preserves_flags, nostack)) }
 }
 
+/// Checks if the interrupts are enables and returns true if they are.
+#[inline(always)]
+pub fn is_interrupts_enabled() -> bool {
+    XFLAGSFlags::INTERRUPT_FLAG.is_in(XFLAGS::read().bits())
+}
+
 /// Does something with disabled interrupts.
 /// 
 /// This function is suitable for preventing deadlocks and other awful things that could be
