@@ -1,12 +1,16 @@
+use super::join_handle::WriterReference;
 /// This is an abstraction over the jobs which are done in the OS.
 
-use super::thread::{Thread, ThreadFn, ThreadOutput};
-use super::{PRIORITY_SCHEDULER, ROUND_ROBIN, PROCESS_MANAGEMENT_UNIT};
+use super::{join_handle::ThreadOutput, PRIORITY_SCHEDULER, ROUND_ROBIN, PROCESS_MANAGEMENT_UNIT};
+use super::thread::{Thread, ThreadFn};
 
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 
+use core::borrow::BorrowMut;
 use core::ops::{Deref, DerefMut, Drop};
 use core::fmt::Debug;
+use core::any::Any;
 use core::mem;
 
 use crate::GLOBAL_ALLOCATOR;
@@ -63,9 +67,11 @@ pub struct Process<'a> {
     pub proc_state: ProcState,
     /// A parent of the current process (if exist).
     pub parent: Option<&'a Process<'a>>,
+    /// A main handle which is what the process returns after the main thread is done.
+    /// pub process_handle: JoinHandle<Box<dyn Any>>,
 
     /// A list of all threads in the current process.
-    pub(crate) threads: ConcurrentList<Thread>,
+    pub(crate) threads: ConcurrentList<Thread<'a>>,
 }
 
 impl<'a> Process<'a> {
@@ -73,7 +79,7 @@ impl<'a> Process<'a> {
     /// 
     /// This function takes another function as a main point of the process. The argument of that function must always be
     /// the thread, that will execute the function in the future.
-    pub fn new<F>(
+    pub fn new<F, T>(
         stack: Stack,
         memory_size: usize, 
         pid: usize,
@@ -81,7 +87,7 @@ impl<'a> Process<'a> {
         parent_process: Option<&'a Process<'a>>,
         main_function: F,
     ) -> Self where
-        F: ThreadFn + core::marker::Send   
+        F: Fn(&mut Thread) -> T + Send + 'static, T: 'static,
     {
         let mut p = Self {
             stack,
@@ -94,13 +100,15 @@ impl<'a> Process<'a> {
     
             threads: ConcurrentList::new(unsafe {&mut GLOBAL_ALLOCATOR }),
         };
+
+
         // Adding some custom code on top of the recieved function.
         //
         // As a main thread, it must clear up the whole process after itself, which basically means
         // marking the process' state as FINAL.
         unsafe {
-            interrupt::with_int_disabled(|| {
-                p.spawn(move |t: &mut Thread| {
+            interrupt::with_int_disabled(|| {   
+                p.spawn(None::<&mut WriterReference>, move |t: &mut Thread| {
                     // Getting a process as a resource still must be fair even at this point.
                     interrupt::with_int_disabled(|| {
                         PROCESS_MANAGEMENT_UNIT.process_list
@@ -109,7 +117,7 @@ impl<'a> Process<'a> {
                             .unwrap().proc_state = ProcState::RUNNING; // Marking the process as running.
                     });
                     
-                    main_function(t);
+                    let output = main_function(t);
 
                     interrupt::with_int_disabled(|| {
                         PROCESS_MANAGEMENT_UNIT.process_list
@@ -117,9 +125,12 @@ impl<'a> Process<'a> {
                             .get_mut(t.pid)
                             .unwrap().proc_state = ProcState::FINAL; // Marking the process finished.
                     });
+
+                    Box::new(output)
                 });
             }); // The main function must spawn the new thread right away
         }
+
         p
     }
 
@@ -127,8 +138,8 @@ impl<'a> Process<'a> {
     /// 
     /// Each thread will obtain an individual random id. The thread parameter within the
     /// function is the thread itself that is about to spawn.
-    pub fn spawn<F>(&mut self, thread_function: F) where
-        F: ThreadFn
+    pub fn spawn<F>(&mut self, writer_ref: Option<&'a mut ThreadOutput<Box<dyn Any>>>, thread_function: F) where
+        F: ThreadFn + Send
     {
         // Getting the ids of all current threads
         let threads_ids: Vec<usize> = self.threads
@@ -151,8 +162,9 @@ impl<'a> Process<'a> {
             self.stack.top,
             thread_id,
             thread_function,
+            writer_ref,
         );
-        
+
         unsafe {
             // The new thread must be append to the scheduler right away. TODO! Add a more advanced
             // way to append the thread to the scheduler, based on it's status.
@@ -162,7 +174,7 @@ impl<'a> Process<'a> {
         }
     }
 
-    /// Finds the thread within process' scope by it's tid.
+    /// Finds the thread within process' scope by it's tid as a reference.
     pub fn find_thread(&self, tid: usize) -> Option<&Thread> {
         if let Some(thread) = self.threads.iter()
             .find(|t| {t.tid == tid}) {
@@ -172,7 +184,8 @@ impl<'a> Process<'a> {
             }
     }
 
-    pub fn find_thread_mut(&mut self, tid: usize) -> Option<&mut Thread> {
+    /// Finds the thread within process' score by it's tid as a mutable reference.
+    pub fn find_thread_mut(&mut self, tid: usize) -> Option<&mut Thread<'a>> {
         let mut index = 0;
         while let Some(thread) = self.threads.get_mut(index) {
             if thread.tid == tid {
