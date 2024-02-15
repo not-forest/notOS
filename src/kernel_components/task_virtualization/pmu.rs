@@ -1,11 +1,16 @@
+use crate::kernel_components::arch_x86_64::interrupts::handler_functions::InterruptStackFrame;
 /// Module for process management unit.
 
-use crate::kernel_components::structures::thread_safe::ConcurrentQueue;
+use crate::kernel_components::structures::{thread_safe::ConcurrentQueue, Single};
 use crate::kernel_components::memory::allocators::{GAllocator, GLOBAL_ALLOCATOR};
 use crate::kernel_components::sync::Mutex;
-use crate::single;
-use super::{Process, ProcState, Task, Thread};
+use crate::kernel_components::arch_x86_64::interrupts;
+use crate::kernel_components::arch_x86_64::controllers::PROGRAMMABLE_INTERRUPT_CONTROLLER;
 
+use crate::single;
+use super::{Process, ProcState, Task, Thread, ThreadState, Scheduler, ROUND_ROBIN, PRIORITY_SCHEDULER};
+
+use core::arch::asm;
 use core::alloc::{GlobalAlloc, Allocator, Layout};
 use core::mem::{self, MaybeUninit, ManuallyDrop};
 use core::ptr::{self, NonNull};
