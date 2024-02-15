@@ -93,7 +93,11 @@ pub struct Stack {
 }
 
 impl Stack {
-    fn new(top: usize, bottom: usize) -> Self {
+    /// Creates a new instance of stack.
+    ///
+    /// The top must be bigger thatn the bottom in order for stack to make any sense.
+    #[inline]
+    pub(crate) fn new(top: usize, bottom: usize) -> Self {
         assert!(top > bottom, "The top is smaller than the bottom.");
 
         Self {
