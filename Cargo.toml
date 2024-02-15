@@ -1,6 +1,8 @@
 [package]
 name = "notOS"
-version = "0.1.0"
+authors = ["notforest"]
+version = "0.1.1"
+readme = "README.md"
 edition = "2021"
 
 [[test]]
@@ -8,3 +10,7 @@ name = "int_tests"
 
 [dependencies]
 proc_macros = { path = "./proc_macros" }
+
+[profile.release]
+codegen-units = 1
+lto = true
