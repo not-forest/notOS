@@ -1,7 +1,7 @@
 use super::join_handle::WriterReference;
 /// This is an abstraction over the jobs which are done in the OS.
 
-use super::{join_handle::ThreadOutput, PRIORITY_SCHEDULER, ROUND_ROBIN, PROCESS_MANAGEMENT_UNIT};
+use super::{join_handle::{ThreadOutput, JoinHandle}, PRIORITY_SCHEDULER, ROUND_ROBIN, PROCESS_MANAGEMENT_UNIT};
 use super::thread::{Thread, ThreadFn};
 
 use alloc::boxed::Box;
@@ -67,14 +67,12 @@ pub struct Process<'a> {
     pub proc_state: ProcState,
     /// A parent of the current process (if exist).
     pub parent: Option<&'a Process<'a>>,
-    /// A main handle which is what the process returns after the main thread is done.
-    /// pub process_handle: JoinHandle<Box<dyn Any>>,
-
     /// A list of all threads in the current process.
     pub(crate) threads: ConcurrentList<Thread<'a>>,
 }
 
 impl<'a> Process<'a> {
+
     /// Creates a new process.
     /// 
     /// This function takes another function as a main point of the process. The argument of that function must always be
@@ -86,10 +84,57 @@ impl<'a> Process<'a> {
         priority: u8,
         parent_process: Option<&'a Process<'a>>,
         main_function: F,
+    ) -> (Self, JoinHandle<T>) where
+        F: Fn(&mut Thread) -> T + Send + 'static, T: 'static,
+    {
+        // Creating an empty process.
+        let mut p = Process::new_nomain(stack, memory_size, pid, priority, parent_process);
+
+        // Spawning the main function right away. It is safe because we have just created an empty
+        // process with not a single thread within.
+        let main_handle = unsafe { p.spawn_main_unchecked(false, main_function) };
+
+        (p, main_handle)
+    }
+
+    /// Creates a new process.
+    /// 
+    /// This function takes another function as a main point of the process. The argument of that function must always be
+    /// the thread, that will execute the function in the future. This function must be used if the
+    /// handle is not needed from the process.
+    pub fn new_void<F, T>(
+        stack: Stack,
+        memory_size: usize, 
+        pid: usize,
+        priority: u8,
+        parent_process: Option<&'a Process<'a>>,
+        main_function: F,
     ) -> Self where
         F: Fn(&mut Thread) -> T + Send + 'static, T: 'static,
     {
-        let mut p = Self {
+        // Creating an empty process.
+        let mut p = Process::new_nomain(stack, memory_size, pid, priority, parent_process);
+
+        // Spawning the main function right away. It is safe because we have just created an empty
+        // process with not a single thread within.
+        unsafe { p.spawn_main_unchecked(true, main_function) };
+
+        p
+    }
+
+    /// Creates a new process.
+    ///
+    /// This function does not require any main function. Putting this process to the PMU will not
+    /// add any changes when task switch occur, because there is no main thread with main function.
+    /// Yet it will cause some delays in task switching and also take some memory.
+    pub fn new_nomain(
+        stack: Stack,
+        memory_size: usize, 
+        pid: usize,
+        priority: u8,
+        parent_process: Option<&'a Process<'a>>,
+    ) -> Self {
+        Self {
             stack,
             memory_size,
             priority,
@@ -97,48 +142,45 @@ impl<'a> Process<'a> {
             pid,
             proc_state: ProcState::INITIAL,
             parent: parent_process,
-    
+   
             threads: ConcurrentList::new(unsafe {&mut GLOBAL_ALLOCATOR }),
-        };
-
-
-        // Adding some custom code on top of the recieved function.
-        //
-        // As a main thread, it must clear up the whole process after itself, which basically means
-        // marking the process' state as FINAL.
-        unsafe {
-            interrupt::with_int_disabled(|| {   
-                p.spawn(None::<&mut WriterReference>, move |t: &mut Thread| {
-                    // Getting a process as a resource still must be fair even at this point.
-                    interrupt::with_int_disabled(|| {
-                        PROCESS_MANAGEMENT_UNIT.process_list
-                            .lock()
-                            .get_mut(t.pid)
-                            .unwrap().proc_state = ProcState::RUNNING; // Marking the process as running.
-                    });
-                    
-                    let output = main_function(t);
-
-                    interrupt::with_int_disabled(|| {
-                        PROCESS_MANAGEMENT_UNIT.process_list
-                            .lock()
-                            .get_mut(t.pid)
-                            .unwrap().proc_state = ProcState::FINAL; // Marking the process finished.
-                    });
-
-                    Box::new(output)
-                });
-            }); // The main function must spawn the new thread right away
         }
+    }
 
-        p
+    /// Spawns the main thread which will run the provided main function.
+    ///
+    /// Returns a join handle that will actually not own the real data, therefore it is safe to
+    /// drop whenewer needed.
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if the main thread already exists within the process.
+    pub fn spawn_main<F, T>(&mut self, main_function: F) -> JoinHandle<T> where
+        F: Fn(&mut Thread) -> T + Send + 'static, T: 'static 
+    {
+        assert!(self.threads.len() == 0, "The process already has a main thread.");
+
+        // Afters the checks we are free to spawn the main.
+        unsafe{ self.spawn_main_unchecked(false, main_function) } 
+    }
+
+    /// Spawns the main thread which will run the provided main function.
+    ///
+    /// This version of the function is made for processes that return nothing. No 'JoinHandle'
+    /// will be returned for this type of functions.
+    pub fn spawn_main_void<F, T>(&mut self, main_function: F) where 
+        F: Fn(&mut Thread) -> T + Send + 'static, T: 'static 
+    {
+        assert!(self.threads.len() == 0, "The process already has a main thread.");
+    
+        unsafe { self.spawn_main_unchecked(true, main_function) };
     }
 
     /// Spawns a new thread in an existing process
     /// 
     /// Each thread will obtain an individual random id. The thread parameter within the
     /// function is the thread itself that is about to spawn.
-    pub fn spawn<F>(&mut self, writer_ref: Option<&'a mut ThreadOutput<Box<dyn Any>>>, thread_function: F) where
+    pub fn spawn<F>(&mut self, writer_ref: Option<&'a mut WriterReference>, thread_function: F) where
         F: ThreadFn + Send
     {
         // Getting the ids of all current threads
@@ -171,6 +213,70 @@ impl<'a> Process<'a> {
             ROUND_ROBIN.append_thread(&thread);
             // Finally push the thread to the list for future contain.
             self.threads.push(thread);
+        }
+    }
+
+    /// Spawns the main thread.
+    ///
+    /// # Unsafe
+    ///
+    /// This function will not check the assertion related to main thread. It is also unsafe
+    /// because it make the borrow checker to forget about the mutable reference to the process'
+    /// output data.
+    #[doc(hidden)]
+    pub unsafe fn spawn_main_unchecked<F, T>(&mut self, is_void: bool, main_function: F) -> JoinHandle<T> where
+        F: Fn(&mut Thread) -> T + Send + 'static, T: 'static 
+    {
+        // Creating a handle that will not actually own the data.
+        let mut main_handle = JoinHandle::new();
+        
+        /// Based on the function type decides if the thread must return something.
+        let unsafe_writer = if is_void {
+            None
+        } else {
+            // Because borrow checker have no idea that main handle does not own the data we must make
+            // it forget about it.
+            Some(unsafe { (main_handle.writer() as *mut WriterReference).as_mut().unwrap() })
+        };
+
+        // Spawning the main thread
+        self._inner_spawn(unsafe_writer, main_function); 
+
+        main_handle
+    }
+
+    /// Does the spawning with given writer reference and function.
+    #[doc(hidden)]
+    fn _inner_spawn<F, T>(&mut self, writer_ref: Option<&'a mut WriterReference>, main_function: F) where
+        F: Fn(&mut Thread) -> T + Send + 'static, T: 'static,
+    {
+        // Adding some custom code on top of the recieved function.
+        //
+        // As a main thread, it must clear up the whole process after itself, which basically means
+        // marking the process' state as FINAL.
+        unsafe {
+            interrupt::with_int_disabled(|| {   
+                self.spawn(writer_ref, move |t: &mut Thread| {
+                    // Getting a process as a resource still must be fair even at this point.
+                    interrupt::with_int_disabled(|| {
+                        PROCESS_MANAGEMENT_UNIT.process_list
+                            .lock()
+                            .get_mut(t.pid)
+                            .unwrap().proc_state = ProcState::RUNNING; // Marking the process as running.
+                    });
+                    
+                    let output = main_function(t);
+
+                    interrupt::with_int_disabled(|| {
+                        PROCESS_MANAGEMENT_UNIT.process_list
+                            .lock()
+                            .get_mut(t.pid)
+                            .unwrap().proc_state = ProcState::FINAL; // Marking the process finished.
+                    });
+
+                    Box::new(output)
+                });
+            });
         }
     }
 
