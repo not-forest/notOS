@@ -23,9 +23,11 @@ single! {
 /// Process Management Unit.
 /// 
 /// This unit contain all running process, and provides an easy interface for creating and killing
-/// processes.
+/// processes. The PMU owns all the processes so it only can remove or add new processes within.
 pub struct PMU<'a> {
+    // The main process list where all processes are places.
     pub process_list: Mutex<PMUList>,
+    // The queue which adds new processes to the process list.
     process_queue: ConcurrentQueue<Process<'a>>,
 }
 
@@ -73,15 +75,27 @@ impl<'a> PMU<'a> {
     /// normally or any other local thread is aborted.
     ///
     /// Works as a wrapper for process_list.lock().remove_proc(pid)
+    /// # Note
+    ///
+    /// This function does not always remove the process.
     pub fn remove(&mut self, pid: usize) -> Result<(), ()> {
         self.process_list.lock().remove_proc(pid)
     }
 
-    /// Checks for halted, finished or aborted processes and does the cleaning.
-    pub fn cleanup(&mut self) {
-        let mut pid = 0; 
-        // It will try to clean the processes until it gets one.
-        while let Err(()) = self.remove(pid) {pid += 1}
+    /// Does something as the chosen process and then removes it. This function is frees the heap
+    /// memory by deallocating memory left from the process. It must be called when the process'
+    /// main thread exited normally or any other local thread is aborted.
+    ///
+    /// This basically mean: do something as a process that is about to be deleted before it is
+    /// deleted. If the function returns something it will be in the returned Result.
+    ///
+    /// # Note
+    ///
+    /// This function does not always remove the process.
+    pub fn do_then_remove<F, T>(&mut self, pid: usize, fun: F) -> Result<T, ()> where
+        F: FnOnce(&mut Process) -> T
+    {
+        self.process_list.lock().do_then_remove_proc(pid, fun)
     }
 }
 
@@ -183,6 +197,45 @@ impl<A: Allocator> PMUList<A> {
                 }
                 
                 return Ok(())
+            }
+
+            next = node.next;
+        }
+
+        Err(())
+    }
+
+    /// Does something as a process and then removes it from the list.
+    ///
+    /// The provided function can be anything. The main idea is to do something as a process before
+    /// the potential possibility of being cleared out. If the function returns T, the T will be an
+    /// output of the returned Result.
+    ///
+    /// # Note
+    ///
+    /// This function will return Ok(T) if it will manage to find the desired process under the
+    /// provided pid, not necessary to remove it.
+    pub fn do_then_remove_proc<F, T>(&mut self, pid: usize, fun: F) -> Result<T, ()> where
+        F: FnOnce(&mut Process<'_>) -> T
+    {
+        let mut next = self.head;
+
+        while let Some(node) = unsafe { (next as *mut PMUListNode).as_mut() } {
+            // Searching for the process.
+            if node.process.pid == pid {
+                // Running the requested function
+                let out = fun(node.get_proc_mut());
+
+                // Doing some changes based on the current state of the process.
+                match node.process.proc_state {
+                    ProcState::FINAL => {
+                        node.node_dealloc(self.alloc);
+                        self.len.saturating_sub(1);
+                    },
+                    _ => (),
+                }
+                
+                return Ok(out)
             }
 
             next = node.next;
