@@ -12,6 +12,9 @@ extern "C" {
     fn header_end();
 }
 
+// The alloc crate will be useful for the main kernel binary no matter what.
+extern crate alloc;
+
 #[used]
 static INITIATE_FUNC: unsafe extern "C" fn() = initiate;
 #[used(linker)]
@@ -137,22 +140,31 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
         PROGRAMMABLE_INTERRUPT_CONTROLLER.lock().reinit_chained(32).remap();
     
         use notOS::kernel_components::task_virtualization::{Process, PROCESS_MANAGEMENT_UNIT};
+        let stack1 = MEMORY_MANAGEMENT_UNIT.allocate_stack(1).unwrap();
 
-        let stack1 = MEMORY_MANAGEMENT_UNIT.allocate_stack(100).unwrap();
-
-        let p1 = Process::new(stack1, 0, 1, 1, None,
-            |t| {
+        let p1 = Process::new_void(stack1, 0, 1, 1, None,
+            |_t| {
                 use notOS::Color;
+                println!(Color::MAGENTA; "Spawning some inner process and obtaining the data from it.");
+                // Our input data that we wish to change.
+                let variable1: usize = 1337;
 
-                let handle1 = t.spawn(move |_t| {
-                    println!(Color::BLUE; "Hello from the thread. Returning 42!");
-                
-                    42 
-                });
+                // Creating a stack for inner process.
+                let stack2 = MEMORY_MANAGEMENT_UNIT.allocate_stack(10).unwrap();
+                // Creating a process itself. Not marking a parent process for now.
+                let (inner_proc, proc_handle) = Process::new(stack2, 0, 2, 1, None,
+                    move |_t| {
+                        println!(Color::GREEN; "Inside the main function of the main thread: {}", variable1);
+                        // Calculating.... 
+                        variable1.rem_euclid(42)
+                    }
+                );
 
-                println!(Color::MAGENTA; "First process is done, waiting for the threads.");
-                let output = handle1.join().ok().unwrap();
-                println!(Color::MAGENTA; "Obtained value: {}. Shutting down.", output);
+                // Writing the inner process to the queue.
+                PROCESS_MANAGEMENT_UNIT.queue(inner_proc);
+                // Waiting for the process to return a value.
+                let process_output = proc_handle.join().unwrap();
+                println!(Color::MAGENTA; "Obtained from the called process: {}", process_output);
             },
         );
 
