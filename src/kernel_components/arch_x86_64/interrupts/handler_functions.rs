@@ -293,7 +293,6 @@ pub mod software {
 
             // Writing the data to handle and removing the writer.
             if let Some(o) = &mut t.output {
-                crate::println!("WRITING DATA!");
                 // Writing data
                 o.write(output);
                 // Changing the status
@@ -312,8 +311,8 @@ pub mod software {
         });
 
         interrupt::with_int_disabled(|| {
-            // Checking for processes that are done executing their tasks:
-            PROCESS_MANAGEMENT_UNIT.cleanup();
+            // Trying to cleanup the process.
+            PROCESS_MANAGEMENT_UNIT.remove(t.pid);
         });
 
         loop {}
