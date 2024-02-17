@@ -10,8 +10,8 @@ use core::{borrow::Borrow, error::Error, fmt::Display, cell::UnsafeCell, any::An
 
 /// A struct that acts as a return value from every thread.
 /// 
-/// The struct will contain the last state of the thread and the returned value from it
-/// as a pointer. If the thread was not exited correctly or it did not returned any value, 
+/// The struct will contain the last state of the thread and the returned value from
+/// If the thread was not exited correctly or it did not returned any value, 
 /// the value will be None.
 #[derive(Debug)]
 pub struct ThreadOutput<T> {
@@ -22,7 +22,7 @@ pub struct ThreadOutput<T> {
 impl<T> ThreadOutput<T> {
     /// Creates a new empty thread output.
     #[inline(always)]
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             thread_state: ThreadState::INIT,
             output: UnsafeCell::new(None),
@@ -80,7 +80,7 @@ impl Display for ThreadOutputError {
 /// impossible to get the data from other places.
 #[derive(Debug)]
 pub struct JoinHandle<T> {
-    pub(crate) data: Arc<ThreadOutput<Box<dyn Any>>>,
+    pub(crate) data: Arc<WriterReference>,
     phantom: PhantomData<T>,
 }
 
@@ -147,8 +147,7 @@ impl<T: 'static> JoinHandle<T> {
     /// value for the output. Only thread itself must be having this value.
     #[inline]
     #[doc(hidden)]
-    pub(crate) unsafe fn writer(&mut self) -> &mut WriterReference {
-        // panic!("{}", Arc::strong_count(&mut self.data));
+    pub(crate) fn writer(&mut self) -> &mut WriterReference {
         Arc::get_mut(&mut self.data).unwrap()
     }
 }
