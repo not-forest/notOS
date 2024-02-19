@@ -14,6 +14,7 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use core::cell::UnsafeCell;
 use core::ops::{Drop, Deref, DerefMut};
 
+use crate::kernel_components::arch_x86_64::interrupts::interrupt;
 use crate::kernel_components::task_virtualization::Thread;
 
 /// General purpose mutex for the OS.
@@ -66,7 +67,8 @@ impl<T> Mutex<T> {
     fn _inner_lock(&self) -> Result<MutexGuard<T>, PoisonError> {
         while self.status.swap(true, Ordering::Acquire) {
             // Yielding when the lock is taken.
-            Thread::r#yield()
+            //Thread::r#yield()
+            interrupt::hlt();
         }
 
         if self.poisoned.load(Ordering::Relaxed) {
