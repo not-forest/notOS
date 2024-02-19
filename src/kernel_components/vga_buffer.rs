@@ -108,8 +108,12 @@ impl Logger {
 /// Implements the fmt::Write trait for the Logger, allowing it to be used with formatted printing macros.
 impl fmt::Write for Logger {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        self.write_str(s);
-        Ok(())
+        unsafe {
+            with_int_disabled(|| {
+                self.write_str(s);
+                Ok(())
+            })
+        }
     }
 }
 
