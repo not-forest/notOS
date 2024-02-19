@@ -85,7 +85,7 @@ impl StackAlloc {
 /// A struct representing the stack.
 /// 
 /// This struct is returned in stack allocator.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(C)]
 pub struct Stack {
     pub top: usize,
@@ -103,5 +103,99 @@ impl Stack {
         Self {
             top, bottom
         }
+    }
+
+    /// Retuns a total size of a stack.
+    #[inline(always)]
+    pub fn size(&self) -> usize {
+        self.top - self.bottom
+    }
+
+    /// Checks if a pointer is within the stack and returns true if it is.
+    #[inline(always)]
+    pub fn contain(&self, ptr: usize) -> bool {
+        ptr >= self.bottom && ptr <= self.top 
+    }
+
+    /// Shrinks the stack based on the input number.
+    ///
+    /// # Returns
+    ///
+    /// Returns the previous stack bottom inside the Ok(usize) if the stack shrinking was done
+    /// successfully. Will return an Err(usize) if not.
+    ///
+    /// # Note
+    ///
+    /// Here the amount is assumed to be in bytes.
+    #[inline(always)]
+    pub fn shrink(&mut self, amount: usize) -> Result<usize, usize> {
+        let b = self.bottom;
+
+        if self.size() > 0 {
+            self.bottom -= amount;
+            Ok(b)
+        } else {
+            Err(b)
+        }
+    }
+
+    /// Shrinks or grows the stack to the provided size
+    ///
+    /// # Note
+    ///
+    /// Here the amount is assumed to be in bytes.
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if the size provided is zero.
+    #[inline(always)]
+    pub fn resize_to(&mut self, size: usize) {
+        assert!(size != 0, "The stack size could not be zero. Deallocate the stack instead.");
+
+        self.bottom = self.top - size;
+    }
+
+    /// Grows the stack based on the input number.
+    ///
+    /// # Returns
+    ///
+    /// Returns a previous stack bottom.
+    ///
+    /// # Note
+    ///
+    /// Here the amount is assumed to be in bytes. 
+    #[inline(always)]
+    pub fn grow(&mut self, amount: usize) -> usize {
+        let b = self.bottom;
+        self.bottom += amount;
+        b
+    }
+
+    /// Shift the stack in memory based on the given offset to the left side. That means closer to
+    /// the smaller addresses.
+    ///
+    /// # Note
+    ///
+    /// Here the offset is assumed to be in bytes. This function will not actually move any data in
+    /// memory, it is only changing inner number values so it could be used in some high level
+    /// structures like MMU.
+    #[inline(always)]
+    pub fn shift_left(&mut self, offset: usize) {
+        self.bottom -= offset;
+        self.top -= offset;
+    }
+
+    /// Shift the stack in memory based on the given offset to the right side. That means closer to
+    /// the bigger addresses.
+    ///
+    /// # Note
+    ///
+    /// Here the offset is assumed to be in bytes. This function will not actually move any data in
+    /// memory, it is only changing inner number values so it could be used in some high level
+    /// structures like MMU.
+    #[inline(always)]
+    pub fn shift_right(&mut self, offset: usize) {
+        self.bottom += offset;
+        self.top += offset;
     }
 }
