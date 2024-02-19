@@ -7,8 +7,9 @@ use super::thread::{Thread, ThreadFn};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use core::borrow::BorrowMut;
+use core::sync::atomic::{AtomicUsize, Ordering};
 use core::ops::{Deref, DerefMut, Drop};
+use core::borrow::BorrowMut;
 use core::fmt::Debug;
 use core::any::Any;
 use core::mem;
@@ -53,26 +54,25 @@ pub enum ProcState {
 #[derive(Debug)]
 #[repr(C)]
 pub struct Process<'a> {
-    /// Universal process id.
-    pub(crate) pid: usize,
     /// Overall heap memory size of the process. This amount could be changed if the process will
     /// ask for more memory region.
     pub memory_size: usize,
     /// Priority number of the underline process. It should range from 0 to 127, where 0 is the
     /// most significant process.
     pub priority: u8,
-    /// Process' stack.
-    pub(crate) stack: Stack,
     /// Current state of the process.
     pub proc_state: ProcState,
     /// A parent of the current process (if exist).
     pub parent: Option<&'a Process<'a>>,
+    /// Universal process id.
+    pub(crate) pid: usize,
+    /// Process' stack.
+    pub(crate) stack: Stack,
     /// A list of all threads in the current process.
     pub(crate) threads: ConcurrentList<Thread<'a>>,
 }
 
 impl<'a> Process<'a> {
-
     /// Creates a new process.
     /// 
     /// This function takes another function as a main point of the process. The argument of that function must always be
@@ -198,10 +198,13 @@ impl<'a> Process<'a> {
             thread_id += 1;
         }
 
+        // Allocating the stack for the thread.
+        let thread_stack = self.alloc_stack();
+
         // Creating the new instance of the thread.
         let mut thread = Thread::new(
             self.pid,
-            self.stack.top,
+            thread_stack,
             thread_id,
             thread_function,
             writer_ref,
@@ -214,6 +217,26 @@ impl<'a> Process<'a> {
             // Finally push the thread to the list for future contain.
             self.threads.push(thread);
         }
+    }
+
+    /// Allocates the stack for a new thread.
+    ///
+    /// This function allocates the stack for a new thread request based on the current state of
+    /// all existing threads and the function that is being used within the requested thread.
+    #[inline]
+    pub fn alloc_stack(&mut self) -> Stack {
+        // For now allocating 128 bytes for every thread. TODO! Get rid of this voodoo constant.
+        const STARTING_OFFSET: usize = 4096;
+        let mut stack = self.stack.clone();
+
+        // crate::println!("{0:x?}", stack);
+        
+        stack.resize_to(STARTING_OFFSET);
+        stack.shift_left(STARTING_OFFSET * self.threads.len());
+
+        // crate::println!("{0:x?}", stack);
+
+        stack
     }
 
     /// Spawns the main thread.
