@@ -20,10 +20,17 @@ pub trait Scheduler {
     /// Deletes the task from the scheduler's list.
     fn delete(&mut self, task: Task);
 
+    /// This function must return the last task that was scheduled.
+    ///
+    /// If no existing tasks was scheduled at that moment, it must return None. This function must
+    /// be implemented carefully, because tasks could be deallocated every moment, therefore it
+    /// must return the task only if it still exists.
+    fn current(&mut self) -> Option<&Task>;
+
     /// The main function for scheduling.
     /// 
     /// This function is being called within the timer interrupt, to perform task switching.
-    /// It must return the next task, based on the inner algorithm.
+    /// It must return the previous and the next task, based on the inner algorithm.
     fn schedule(&mut self) -> Option<&Task>;
 
     /// Clears the process queue if the scheduler use some list-like structure to contain current
