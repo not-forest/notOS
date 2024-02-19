@@ -172,6 +172,7 @@ pub mod software {
             ThreadFn, Thread,
             ThreadState, ProcState,
         };
+        use core::sync::atomic::Ordering;
 
         // This thread input must be changed when the function call must be done.
         //
@@ -180,6 +181,7 @@ pub mod software {
 
         // Pushing new process if it exist.
         PROCESS_MANAGEMENT_UNIT.dequeue();
+        //crate::println!(Color::RED; "{0:x}", stack_frame.stack_ptr);
 
         // Perform a task switch.
         //
@@ -187,35 +189,48 @@ pub mod software {
         // and changing both instruction and stack pointers to the corresponding pointers
         // of that thread.
         interrupts::with_int_disabled(|| {
-            // Trying to obtain some tasks from a scheduler if some.
-            if let Some(task) = ROUND_ROBIN.schedule() {
-                // println!("{:#x?}", task);
+            // Getting the lock.
+            let mut pmu = PROCESS_MANAGEMENT_UNIT.process_list.lock();
+
+            // Trying to obtain current tasks, if they exist.
+            if let Some(task) = ROUND_ROBIN.current() { 
+                //println!("OLD TASK: {:#x?}", task);
                 // Trying to find the process by task's pid.
                 //
                 // If not exists, we can easily delete all tasks with this pid.
-                if let Some(process) = PROCESS_MANAGEMENT_UNIT.process_list
-                    .lock()
-                    .get_mut(task.pid) {
-
-                    // Changing the process' stack top based on the current stack pointer.
-                    process.stack.top = stack_frame.stack_ptr;
-                    
+                if let Some(process) = pmu.get_mut(task.pid) {
                     // Trying to find the thread by task's tid.
                     //
                     // If not exists, we can delete this specific task.
                     if let Some(thread) = process.find_thread_mut(task.tid) {
-                        // Getting the current instruction pointer and stack pointer.
-                        let new_stack = thread.stack_ptr;
-                        let new_ip  = thread.instruction_ptr;
+                        // Doing some tasks to the previous thread, based on it's state.
+                        match thread.thread_state {
+                            ThreadState::RUNNING => {
+                                // Writting the old values to the thread.
+                                let new_stack = thread.stack_ptr.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |_| Some(stack_frame.stack_ptr));
+                                let new_ip = thread.instruction_ptr.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |_| Some(stack_frame.instruction_pointer));
 
-                        // Writting the old values to the thread.
-                        thread.stack_ptr = stack_frame.stack_ptr;
-                        thread.instruction_ptr = stack_frame.instruction_pointer;
-                        
-                        // Changing the current stack pointer to the thread's ones.
-                        stack_frame.stack_ptr = new_stack;
-                        stack_frame.instruction_pointer = new_ip;
-                       
+                                // Changing the current stack pointer to the thread's ones.
+                                stack_frame.stack_ptr = new_stack.unwrap();
+                                stack_frame.instruction_pointer = new_ip.unwrap();
+                            },
+                            _ => (),
+                        }
+                    }
+                }
+            }
+            // Trying to obtain some new tasks from a scheduler if some.
+            if let Some(task) = ROUND_ROBIN.schedule() {
+                //println!("NEW TASK: {:#x?}", task);
+                // Trying to find the process by task's pid.
+                //
+                // If not exists, we can easily delete all tasks with this pid.
+                if let Some(process) = pmu.get_mut(task.pid) {
+                    // Trying to find the thread by task's tid.
+                    //
+                    // If not exists, we can delete this specific task.
+                    if let Some(thread) = process.find_thread_mut(task.tid) {
+                        // Doing different tasks based on the thread state.
                         match thread.thread_state {
                             ThreadState::INIT => {
                                 // If the thread is only about to run we must provide some additional information for it.
@@ -230,6 +245,10 @@ pub mod software {
                                 if let Some(o) = &mut thread.output {
                                     o.change_state(ThreadState::RUNNING);
                                 }
+
+                                // Changing the current stack pointer to the thread's ones.
+                                stack_frame.stack_ptr = thread.stack_ptr.load(Ordering::Acquire);
+                                stack_frame.instruction_pointer = thread.instruction_ptr.load(Ordering::Acquire);
                             },
                             _ => (),
                         } 
@@ -300,22 +319,20 @@ pub mod software {
                 // Dropping the writer reference and living None on it's place.
                 drop(t.output.take());
             }
-        });
 
-        interrupt::with_int_disabled(|| {
             // The PC will get here once the task is done. At this moment the task is
             // not needed anymore and can be removed.
             ROUND_ROBIN.delete(
-                Task { pid: t.pid, tid: t.tid }
+              Task { pid: t.pid, tid: t.tid }
             );
-        });
 
-        interrupt::with_int_disabled(|| {
             // Trying to cleanup the process.
             PROCESS_MANAGEMENT_UNIT.remove(t.pid);
         });
 
-        loop {}
+        loop {
+            interrupt::wait_for_interrupt();
+        }
     }
 
     /// Software keyboard interrupt handler
