@@ -4,6 +4,8 @@ use super::{Scheduler, Task, Thread, ThreadFn, Process};
 use crate::{GLOBAL_ALLOCATOR, single};
 use crate::kernel_components::structures::thread_safe::ConcurrentList;
 use core::sync::atomic::{AtomicUsize, Ordering};
+use core::any::Any;
+use alloc::boxed::Box;
 
 single! {
     pub mut ROUND_ROBIN: RoundRobin = RoundRobin::new();
@@ -57,21 +59,19 @@ impl Scheduler for RoundRobin {
         }
     }
 
-    fn schedule(&mut self) -> Option<&Task> {
-        let task = self.list.get(self.current_task.load(Ordering::Relaxed));
-        
-        let index = self.current_task.fetch_add(1, Ordering::SeqCst);
+    fn current(&mut self) -> Option<&Task> {
+        self.list.get(self.current_task.load(Ordering::Relaxed)) 
+    }
 
-        if index + 1 >= self.list.len() {
-            self.current_task.compare_exchange(
-                index + 1, 
-                0, 
-                Ordering::SeqCst, 
-                Ordering::Relaxed,
-            );
-        }
+    fn schedule(&mut self) -> Option<&Task> {
+        let mut index = self.current_task.load(Ordering::Acquire) + 1;
         
-        task
+        if index >= self.list.len() {
+            index = 0;
+        }
+
+        self.current_task.store(index, Ordering::Release);
+        self.list.get(index)
     }
 
     unsafe fn clear(&mut self) {
