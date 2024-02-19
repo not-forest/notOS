@@ -140,31 +140,30 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
         PROGRAMMABLE_INTERRUPT_CONTROLLER.lock().reinit_chained(32).remap();
     
         use notOS::kernel_components::task_virtualization::{Process, PROCESS_MANAGEMENT_UNIT};
-        let stack1 = MEMORY_MANAGEMENT_UNIT.allocate_stack(1).unwrap();
+        let stack1 = MEMORY_MANAGEMENT_UNIT.allocate_stack(10).unwrap();
 
         let p1 = Process::new_void(stack1, 0, 1, 1, None,
-            |_t| {
+            |t| {
                 use notOS::Color;
-                println!(Color::MAGENTA; "Spawning some inner process and obtaining the data from it.");
-                // Our input data that we wish to change.
-                let variable1: usize = 1337;
+                use notOS::kernel_components::sync::Mutex;
+                use alloc::sync::Arc;      
 
-                // Creating a stack for inner process.
-                let stack2 = MEMORY_MANAGEMENT_UNIT.allocate_stack(10).unwrap();
-                // Creating a process itself. Not marking a parent process for now.
-                let (inner_proc, proc_handle) = Process::new(stack2, 0, 2, 1, None,
-                    move |_t| {
-                        println!(Color::GREEN; "Inside the main function of the main thread: {}", variable1);
-                        // Calculating.... 
-                        variable1.rem_euclid(42)
-                    }
-                );
+                println!(Color::MAGENTA; "Hello from the main thread.");
+                let data = Arc::new(Mutex::new(0));
+             
+                for _ in 0..10 {
+                    let data = Arc::clone(&data);
 
-                // Writing the inner process to the queue.
-                PROCESS_MANAGEMENT_UNIT.queue(inner_proc);
-                // Waiting for the process to return a value.
-                let process_output = proc_handle.join().unwrap();
-                println!(Color::MAGENTA; "Obtained from the called process: {}", process_output);
+                    let handle = t.spawn(move |_| {
+                        let mut value = data.lock();
+                        *value += 1;
+                        println!(Color::GREEN; "Current value is: {}", *value);
+                    });
+
+                    handle.join().ok();
+                }
+
+                println!(Color::MAGENTA; "Result value is: {}", *data.lock());
             },
         );
 
