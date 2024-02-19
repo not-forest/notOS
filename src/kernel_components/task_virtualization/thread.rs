@@ -5,11 +5,13 @@ use core::any::{Any, TypeId};
 use core::ptr::NonNull;
 use core::fmt::Debug;
 use core::cell::RefCell;
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 
 use crate::kernel_components::arch_x86_64::interrupts::interrupt;
+use crate::kernel_components::memory::stack_allocator::Stack;
 use crate::kernel_components::arch_x86_64::{
     controllers::PROGRAMMABLE_INTERRUPT_CONTROLLER, interrupts::{self, handler_functions::software::task_switch_call},
 };
@@ -72,10 +74,12 @@ pub struct Thread<'a> {
     pub pid: usize,
     /// The current state of the thread.
     pub thread_state: ThreadState,
+    /// An overall stack allocated for the current thread.
+    pub(crate) stack: Stack, 
     /// An instruction pointer of the thread.
-    pub(crate) instruction_ptr: usize,
+    pub(crate) instruction_ptr: AtomicUsize,
     /// A stack pointer of the thread.
-    pub(crate) stack_ptr: usize,
+    pub(crate) stack_ptr: AtomicUsize,
     /// A pointer to output value of the thread
     pub(crate) output: Option<&'a mut WriterReference>,
     /// A function that the current thread must perform
@@ -105,14 +109,15 @@ impl<'a> Thread<'a> {
     /// # Join Handle
     ///
     /// If the thread must not return anything the join handle is not needed.
-    pub fn new<F>(process_id: usize, stack_pointer: usize, thread_id: usize, function: F, writer_ref: Option<&'a mut WriterReference>) -> Self where
+    pub fn new<F>(process_id: usize, stack: Stack, thread_id: usize, function: F, writer_ref: Option<&'a mut WriterReference>) -> Self where
         F: ThreadFn
     {
         Self {
             pid: process_id,
             tid: thread_id,
-            instruction_ptr: task_switch_call as usize,
-            stack_ptr: stack_pointer,
+            instruction_ptr: AtomicUsize::new(task_switch_call as usize),
+            stack_ptr: AtomicUsize::new(stack.top),
+            stack: stack,
             thread_state: ThreadState::INIT,
             output: writer_ref,
             fun: Box::new(function),
