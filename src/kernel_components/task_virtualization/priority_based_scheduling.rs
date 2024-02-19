@@ -67,38 +67,41 @@ impl Scheduler for PriorityScheduler {
         }
     }
 
+    fn current(&mut self) -> Option<&Task> {
+        self.list.get(self.current_task.load(Ordering::Acquire)) 
+    }
+
     fn schedule(&mut self) -> Option<&Task> {
-        if let Some(mut current_task) = self.list.get(self.current_task.load(Ordering::Relaxed)) {
+        let mut index = self.current_task.load(Ordering::Acquire) + 1;
+
+        if index >= self.list.len() {
+            index = 0
+        }
+
+        if let Some(mut current_task) = self.list.get(index) {
             let mut pri = u8::MAX;
 
-            for task in self.list.iter() {
+            for (i, task) in self.list.iter().enumerate() {
                 unsafe {
                     if let Some(proc) = PROCESS_MANAGEMENT_UNIT.process_list.lock().get(task.pid) {
                         if proc.priority < pri {
                             current_task = task;
+                            index = i;
                             pri = proc.priority;
                         } else if proc.priority == 0 {
                             current_task = task;
+                            index = i;
                             break
                         }
                     }
                 }
             }
 
+            self.current_task.store(index, Ordering::Release);
+
             return Some(current_task)
         }
-
-        let index = self.current_task.fetch_add(1, Ordering::SeqCst);
-
-        if index + 1 >= self.list.len() {
-            self.current_task.compare_exchange(
-                index + 1, 
-                0, 
-                Ordering::SeqCst, 
-                Ordering::Relaxed,
-            );
-        }
-        
+ 
         None
     }
 
