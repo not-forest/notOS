@@ -341,9 +341,9 @@ unsafe impl Allocator for FreeListAlloc {
                 
                 let return_ptr = (node as *const _ as usize + NODE_HEADER_SIZE) & align_mask;
                 
-                #[cfg(debug_assertions)] {
-                    crate::println!("Allocating {} bytes at {:#x}", layout.size(), return_ptr);
-                }
+                //#[cfg(debug_assertions)] {
+                //   crate::println!("Allocating {} bytes at {:#x}", layout.size(), return_ptr);
+                //}
                 
                 return Ok(NonNull::slice_from_raw_parts(
                     NonNull::new(return_ptr as *mut u8).unwrap(),
@@ -394,7 +394,6 @@ unsafe impl Allocator for FreeListAlloc {
 
         loop {
             let mut next_node = self.head.load(Ordering::Relaxed);
-            // crate::println!("FREE NODE: {:#x}, WE ARE DEALLOCATING: {:#x}, AND THE NEXT ONE IS {:#x}", free_node as usize, next_node_ptr, next_node);
 
             if next_node == next_node_ptr {
                 self.head.compare_exchange(
@@ -435,9 +434,9 @@ unsafe impl Allocator for FreeListAlloc {
                 next_node = node.next.load(Ordering::Acquire);
             }
     
-            #[cfg(debug_assertions)] {
-                crate::println!("Deallocating {} bytes from {:#x}", layout.size(), ptr.as_ptr() as usize);
-            }
+            //#[cfg(debug_assertions)] {
+            //    crate::println!("Deallocating {} bytes from {:#x}", layout.size(), ptr.as_ptr() as usize);
+            //}
     
             break
         }
