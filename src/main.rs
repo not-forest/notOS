@@ -144,26 +144,23 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
 
         let p1 = Process::new_void(stack1, 0, 1, 1, None,
             |t| {
+                use notOS::kernel_components::task_virtualization::Thread;
                 use notOS::Color;
-                use notOS::kernel_components::sync::Mutex;
-                use alloc::sync::Arc;      
+                println!(Color::MAGENTA; "Start of the main.");
 
-                println!(Color::MAGENTA; "Hello from the main thread.");
-                let data = Arc::new(Mutex::new(0));
-             
-                for _ in 0..10 {
-                    let data = Arc::clone(&data);
+                let handle = t.spawn(|_t| {
+                    // Yielding this thread.
+                    Thread::r#yield();
 
-                    let handle = t.spawn(move |_| {
-                        let mut value = data.lock();
-                        *value += 1;
-                        println!(Color::GREEN; "Current value is: {}", *value);
-                    });
+                    println!(Color::RED; "Hello from the red thread.");
+                });
 
-                    handle.join().ok();
-                }
+                t.spawn(|_t| {
+                    println!(Color::GREEN; "Hello from the green thread.");
+                });
 
-                println!(Color::MAGENTA; "Result value is: {}", *data.lock());
+                handle.join().ok();
+                println!(Color::MAGENTA; "End of the main.");
             },
         );
 
