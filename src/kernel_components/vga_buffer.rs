@@ -5,11 +5,7 @@
 /// to a VGA buffer, simulating output on the screen in a basic operating system environment.
 
 use core::fmt;
-use crate::{
-    kernel_components::arch_x86_64::interrupts::with_int_disabled,
-    kernel_components::sync::Mutex,
-    single,
-};
+use crate::{kernel_components::sync::Mutex, single, critical_section};
 
 const BUFFER_HEIGHT: usize = 25;
 const BUFFER_WIDTH: usize = 80;
@@ -108,12 +104,10 @@ impl Logger {
 /// Implements the fmt::Write trait for the Logger, allowing it to be used with formatted printing macros.
 impl fmt::Write for Logger {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        unsafe {
-            with_int_disabled(|| {
-                self.write_str(s);
-                Ok(())
-            })
-        }
+        critical_section!(|| {
+            self.write_str(s);
+            Ok(())
+        })
     }
 }
 
@@ -205,17 +199,9 @@ macro_rules! move_cursor {
 /// '''
 #[macro_export]
 macro_rules! print {
-    ($fr:expr; $($arg:tt)*) => {
-        $crate::kernel_components::vga_buffer::_coloring($fr, None);
-        $crate::print!($($arg)*);
-        $crate::kernel_components::vga_buffer::_coloring($crate::Color::WHITE, Some($crate::Color::BLACK));
-    };
-    ($fr:expr; $bg:expr; $($arg:tt)*) => {
-        $crate::kernel_components::vga_buffer::_coloring($fr, Some($bg));
-        $crate!($($arg)*);
-        $crate::kernel_components::vga_buffer::_coloring($crate::Color::WHITE, Some($crate::Color::BLACK));
-    };
-    ($($arg:tt)*) => ($crate::kernel_components::vga_buffer::_print(format_args!($($arg)*)));
+    ($fr:expr; $bg:expr; $($arg:tt)*) => ($crate::kernel_components::vga_buffer::_print(Some($fr), Some($bg), format_args!($($arg)*)));
+    ($fr:expr; $($arg:tt)*) => ($crate::kernel_components::vga_buffer::_print(Some($fr), None, format_args!($($arg)*)));
+    ($($arg:tt)*) => ($crate::kernel_components::vga_buffer::_print(None, None, format_args!($($arg)*)));
 }
 
 /// Prints the content to the screen via VGA buffer and moves the cursor to new line. It does support coloring
@@ -242,28 +228,11 @@ macro_rules! print {
 macro_rules! println {
     () => ($crate::print!("\n"));
     ($fmt:expr) => ($crate::print!(concat!($fmt, '\n')));
-    ($fmt:expr, $($arg:tt)*) => ($crate::print!(concat!($fmt, '\n'), $($arg)*));
-    
-    ($fr:expr; $fmt:expr) => {
-        $crate::kernel_components::vga_buffer::_coloring($fr, None);
-        $crate::println!($fmt);
-        $crate::kernel_components::vga_buffer::_coloring($crate::Color::WHITE, Some($crate::Color::BLACK));
-    };
-    ($fr:expr; $bg:expr; $fmt:expr) => {
-        $crate::kernel_components::vga_buffer::_coloring($fr, Some($bg));
-        $crate::println!($fmt);
-        $crate::kernel_components::vga_buffer::_coloring($crate::Color::WHITE, Some($crate::Color::BLACK));
-    };
-    ($fr:expr; $fmt:expr, $($arg:tt)*) => {
-        $crate::kernel_components::vga_buffer::_coloring($fr, None);
-        $crate::println!($fmt, $($arg)*);
-        $crate::kernel_components::vga_buffer::_coloring($crate::Color::WHITE, Some($crate::Color::BLACK));
-    };
-    ($fr:expr; $bg:expr; $fmt:expr, $($arg:tt)*) => {
-        $crate::kernel_components::vga_buffer::_coloring($fr, Some($bg));
-        $crate::println!($fmt, $($arg)*);
-        $crate::kernel_components::vga_buffer::_coloring($crate::Color::WHITE, Some($crate::Color::BLACK));
-    };
+    ($fmt:expr, $($arg:tt)*) => ($crate::print!(concat!($fmt, '\n'), $($arg)*)); 
+    ($fr:expr; $fmt:expr) => ($crate::print!($fr; concat!($fmt, '\n')));
+    ($fr:expr; $bg:expr; $fmt:expr) => ($crate::print!($fr, $bg, concat!($fmt, '\n')));
+    ($fr:expr; $fmt:expr, $($arg:tt)*) => ($crate::print!($fr; concat!($fmt, '\n'), $($arg)*));   
+    ($fr:expr; $bg:expr; $fmt:expr, $($arg:tt)*) => ($crate::print!($fr; $bg; concat!($fmt, '\n'), $($arg)*)); 
 }
 
 /// Writes a warning message to the screen in yellow.
@@ -292,28 +261,24 @@ macro_rules! debug {
 }
 
 #[doc(hidden)]
-pub fn _print(args: fmt::Arguments) {
+pub fn _print(fr: Option<Color>, bg: Option<Color>, args: fmt::Arguments) {
     use core::fmt::Write;
-    unsafe {
-        with_int_disabled(|| {
-            LOGGER.lock().write_fmt(args).unwrap();
-        });
-    }
+    critical_section!(|| {
+        _coloring(fr, bg);
+        LOGGER.lock().write_fmt(args).unwrap();
+        _coloring(None, None);
+    });
 }
 
 #[doc(hidden)]
-pub fn _coloring(fr: Color, bg: Option<Color>) {
+pub fn _coloring(fr: Option<Color>, bg: Option<Color>) {
     if let Some(bg) = bg {
-        unsafe {
-            with_int_disabled(|| {
-                LOGGER.lock().change_color(fr, bg);
-            });
-        }
+        LOGGER.lock().change_color(fr.unwrap(), bg);        
     } else {
-        unsafe {
-            with_int_disabled(|| {
-                LOGGER.lock().change_color(fr, Color::BLACK);
-            });
+        if let Some(fr) = fr {
+            LOGGER.lock().change_color(fr, Color::BLACK);
+        } else {
+            LOGGER.lock().change_color(Color::WHITE, Color::BLACK);
         }
     }
 }
