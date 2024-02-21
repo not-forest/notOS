@@ -500,3 +500,19 @@ pub unsafe fn cause_interrupt_unsafe(vector_num: u8) {
         255 => asm!("int 255", options(nomem, preserves_flags)),
     }
 }
+
+/// A macro that provides an easy way to implement critical sections.
+///
+/// This macro is just a wrapper around the with_int_disabled method, so it is not necessary to
+/// always import it from this module. This macro can return values the same way as the method
+/// does.
+#[macro_export]
+macro_rules! critical_section {
+    ($fn:expr) => {
+        unsafe {
+            $crate::kernel_components::arch_x86_64::interrupts::with_int_disabled(|| {
+                $fn()
+            })
+        }
+    };
+}
