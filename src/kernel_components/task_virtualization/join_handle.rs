@@ -1,8 +1,7 @@
-use crate::kernel_components::arch_x86_64::interrupts::interrupt;
-
 /// A module for handling the output value from the threads as well as controlling their behavior
 /// in terms of synchronisation.
 
+use crate::critical_section;
 use super::{ThreadState, Thread};
 
 use alloc::{sync::Arc, boxed::Box};
@@ -106,19 +105,17 @@ impl<T: 'static> JoinHandle<T> {
         // Halts until the data exist.
         while !self.exited_normally() {}
 
-        unsafe {
-            interrupt::with_int_disabled(|| {
-                // Converting Any to datatype.
-                if let Some(output) = Arc::get_mut(&mut self.data) {
-                    match output.take() {
-                        Ok(val) => Ok(val.downcast().ok().unwrap()),
-                        Err(err) => Err(err),
-                    }
-                } else {
-                    Err(ThreadOutputError::CannotRetrieve)
+        critical_section!(|| {
+            // Converting Any to datatype.
+            if let Some(output) = Arc::get_mut(&mut self.data) {
+                match output.take() {
+                    Ok(val) => Ok(val.downcast().ok().unwrap()),
+                    Err(err) => Err(err),
                 }
-            })
-        }
+            } else {
+                Err(ThreadOutputError::CannotRetrieve)
+            }
+        })
     }
 
     /// Returns a current status of the thread.
@@ -127,11 +124,9 @@ impl<T: 'static> JoinHandle<T> {
     /// valid at the moment of the call. If the thread state is not set it can only mean that it is
     /// running.pub fn status(&mut self) -> ThreadState {
     pub fn state(&self) -> ThreadState {
-        unsafe {
-            interrupt::with_int_disabled(|| {
-                self.data.as_ref().thread_state.clone()
-            })
-        }
+        critical_section!(|| {
+            self.data.as_ref().thread_state.clone()
+        })
     }
 
     /// Allows to peek and see if the thread has completed it's task and returned
