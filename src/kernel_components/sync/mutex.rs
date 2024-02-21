@@ -67,8 +67,7 @@ impl<T> Mutex<T> {
     fn _inner_lock(&self) -> Result<MutexGuard<T>, PoisonError> {
         while self.status.swap(true, Ordering::Acquire) {
             // Yielding when the lock is taken.
-            //Thread::r#yield()
-            interrupt::hlt();
+            Thread::r#yield()
         }
 
         if self.poisoned.load(Ordering::Relaxed) {
