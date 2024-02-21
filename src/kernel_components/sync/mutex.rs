@@ -14,7 +14,6 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use core::cell::UnsafeCell;
 use core::ops::{Drop, Deref, DerefMut};
 
-use crate::kernel_components::arch_x86_64::interrupts::interrupt;
 use crate::kernel_components::task_virtualization::Thread;
 
 /// General purpose mutex for the OS.
