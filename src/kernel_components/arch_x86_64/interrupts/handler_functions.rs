@@ -209,10 +209,6 @@ pub mod software {
                                 // Writting the old values to the thread.
                                 let new_stack = thread.stack_ptr.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |_| Some(stack_frame.stack_ptr));
                                 let new_ip = thread.instruction_ptr.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |_| Some(stack_frame.instruction_pointer));
-
-                                // Changing the current stack pointer to the thread's ones.
-                                stack_frame.stack_ptr = new_stack.unwrap();
-                                stack_frame.instruction_pointer = new_ip.unwrap();
                             },
                             _ => (),
                         }
@@ -245,13 +241,13 @@ pub mod software {
                                 if let Some(o) = &mut thread.output {
                                     o.change_state(ThreadState::RUNNING);
                                 }
-
-                                // Changing the current stack pointer to the thread's ones.
-                                stack_frame.stack_ptr = thread.stack_ptr.load(Ordering::Acquire);
-                                stack_frame.instruction_pointer = thread.instruction_ptr.load(Ordering::Acquire);
                             },
                             _ => (),
-                        } 
+                        }
+
+                        // Changing the current stack pointer to the thread's ones.
+                        stack_frame.stack_ptr = thread.stack_ptr.load(Ordering::Acquire);
+                        stack_frame.instruction_pointer = thread.instruction_ptr.load(Ordering::Acquire);
                     } else {
                         // If there are no underlying threads we must delete the hangling task
                         ROUND_ROBIN.delete(*task);
