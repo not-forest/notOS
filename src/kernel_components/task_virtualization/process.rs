@@ -1,7 +1,6 @@
-use super::join_handle::WriterReference;
 /// This is an abstraction over the jobs which are done in the OS.
 
-use super::{join_handle::{ThreadOutput, JoinHandle}, PRIORITY_SCHEDULER, ROUND_ROBIN, PROCESS_MANAGEMENT_UNIT};
+use super::{join_handle::{ThreadOutput, JoinHandle, WriterReference}, PRIORITY_SCHEDULER, ROUND_ROBIN, PROCESS_MANAGEMENT_UNIT};
 use super::thread::{Thread, ThreadFn};
 
 use alloc::boxed::Box;
@@ -14,8 +13,7 @@ use core::fmt::Debug;
 use core::any::Any;
 use core::mem;
 
-use crate::GLOBAL_ALLOCATOR;
-use crate::kernel_components::arch_x86_64::interrupts::interrupt;
+use crate::{GLOBAL_ALLOCATOR, critical_section};
 use crate::kernel_components::arch_x86_64::{RdRand, RdSeed};
 use crate::kernel_components::memory::stack_allocator::Stack;
 use crate::kernel_components::structures::thread_safe::ConcurrentList;
@@ -277,30 +275,28 @@ impl<'a> Process<'a> {
         //
         // As a main thread, it must clear up the whole process after itself, which basically means
         // marking the process' state as FINAL.
-        unsafe {
-            interrupt::with_int_disabled(|| {   
-                self.spawn(writer_ref, move |t: &mut Thread| {
-                    // Getting a process as a resource still must be fair even at this point.
-                    interrupt::with_int_disabled(|| {
-                        PROCESS_MANAGEMENT_UNIT.process_list
-                            .lock()
-                            .get_mut(t.pid)
-                            .unwrap().proc_state = ProcState::RUNNING; // Marking the process as running.
-                    });
-                    
-                    let output = main_function(t);
-
-                    interrupt::with_int_disabled(|| {
-                        PROCESS_MANAGEMENT_UNIT.process_list
-                            .lock()
-                            .get_mut(t.pid)
-                            .unwrap().proc_state = ProcState::FINAL; // Marking the process finished.
-                    });
-
-                    Box::new(output)
+        critical_section!(|| {
+            self.spawn(writer_ref, move |t: &mut Thread| {
+                // Getting a process as a resource still must be fair even at this point.
+                critical_section!(|| {
+                    PROCESS_MANAGEMENT_UNIT.process_list
+                        .lock()
+                        .get_mut(t.pid)
+                        .unwrap().proc_state = ProcState::RUNNING; // Marking the process as running.
                 });
+                
+                let output = main_function(t);
+
+                critical_section!(|| {
+                    PROCESS_MANAGEMENT_UNIT.process_list
+                        .lock()
+                        .get_mut(t.pid)
+                        .unwrap().proc_state = ProcState::FINAL; // Marking the process finished.
+                });
+
+                Box::new(output)
             });
-        }
+        });
     }
 
     /// Finds the thread within process' scope by it's tid as a reference.

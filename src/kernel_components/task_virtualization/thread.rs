@@ -10,6 +10,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 
+use crate::critical_section;
 use crate::kernel_components::arch_x86_64::interrupts::interrupt;
 use crate::kernel_components::memory::stack_allocator::Stack;
 use crate::kernel_components::arch_x86_64::{
@@ -143,25 +144,23 @@ impl<'a> Thread<'a> {
         // If the function returns () makes thread return nothing.
         let mut handle = JoinHandle::new();
 
-        unsafe {
-            interrupts::with_int_disabled(|| {
-                PROCESS_MANAGEMENT_UNIT.process_list
-                    .lock()
-                    .get_mut(self.pid)
-                    .unwrap()
-                    .spawn(
-                        Some (
-                            handle.writer()
-                        ),
-                        
-                        move |t| -> Box<dyn Any> {
-                            let output = thread_function(t);
-    
-                            Box::new(output)
-                        }
-                    );
-            });
-        }
+        critical_section!(|| {
+            PROCESS_MANAGEMENT_UNIT.process_list
+            .lock()
+            .get_mut(self.pid)
+            .unwrap()
+            .spawn(
+                Some (
+                    handle.writer()
+                ),
+
+                move |t| -> Box<dyn Any> {
+                    let output = thread_function(t);
+
+                    Box::new(output)
+                }
+            );
+        });
 
         handle 
     }
