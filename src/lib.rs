@@ -140,12 +140,14 @@ pub mod kernel_components {
             pub mod bump_alloc;
             pub mod node_alloc;
             pub mod free_list_alloc;
+            pub mod buddy_alloc;
 
             pub use global_alloc::{GAllocator, SubAllocator, GLOBAL_ALLOCATOR};
             pub use leak_alloc::{LeakAlloc, LEAK_ALLOC};
             pub use bump_alloc::{BumpAlloc, BUMP_ALLOC};
             pub use node_alloc::{NodeAlloc, NODE_ALLOC};
             pub use free_list_alloc::{FreeListAlloc, FREE_LIST_ALLOC};
+            pub use buddy_alloc::{BuddyAlloc, BUDDY_ALLOC};
         }
 
         pub mod stack_allocator;
@@ -208,7 +210,7 @@ pub use kernel_components::{
     },
 
     memory::{
-        allocators::{GLOBAL_ALLOCATOR, LEAK_ALLOC, BUMP_ALLOC, NODE_ALLOC, FREE_LIST_ALLOC},
+        allocators::{GLOBAL_ALLOCATOR, LEAK_ALLOC, BUMP_ALLOC, NODE_ALLOC, FREE_LIST_ALLOC, BUDDY_ALLOC},
     },
 
     vga_buffer::Color,
