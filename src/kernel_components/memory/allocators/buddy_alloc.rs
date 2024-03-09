@@ -1,0 +1,327 @@
+/// Buddy allocator implementation.
+///
+/// This allocator is used to prevent memory segmentation by diving each
+/// memory segment by two, until the requested data size is achieved or
+/// until the next division will not fit the requested data.
+///
+/// Since most datatypes are some multiples by two, this allows the allocator
+/// to satisfy deallocations that happen rapidly as well as fast allocations.
+///
+/// This particular implementation is a binary allocator system. Which means
+/// that each block will be divided by two same halves. Each 'Buddy' in such
+/// system will give info about it's children, if they are blocked or not.
+///
+/// # Fragmentation
+///
+/// This allocator allows for the least amount of fragmantation, because it is
+/// holding all it's data within a fixed sized chunks, which are a powers of two,
+/// if the header is counted.
+///
+/// # Warning
+///
+/// This implementation makes the smallest allocation possible of 64 bytes. Because
+/// the 'BuddyHeader' structure itself has a size of 32 bytes, all data which are smaller
+/// or equal to 32 bytes must be written within a 64 byte node. Larger data will be written
+/// on bigger nodes.
+
+use crate::single;
+use super::SubAllocator;
+use core::alloc::{Allocator, Layout, GlobalAlloc, AllocError};
+use core::mem;
+use core::ptr::{self, NonNull};
+use core::sync::atomic::{AtomicUsize, Ordering, AtomicBool};
+
+/// Start address of the memory heap. Use any address as long as it is not used.
+pub const FREE_LIST_ALLOC_HEAP_START: usize = 0o_000_001_000_000_0000;
+/// Maximal size of the whole arena. Adjust the size as needed.
+pub const FREE_LIST_ALLOC_HEAP_ARENA: usize = 128 * 1024;
+/// Constant size of the free-list node.
+const NODE_HEADER_SIZE: usize = mem::size_of::<BuddyHeader>();
+
+single! {
+    pub mut BUDDY_ALLOC: BuddyAlloc = BuddyAlloc::new(
+        FREE_LIST_ALLOC_HEAP_START,
+        FREE_LIST_ALLOC_HEAP_START + FREE_LIST_ALLOC_HEAP_ARENA,
+    );
+}
+
+/// A single node of the buddy allocator's binary tree
+///
+/// Like in regular binary tries, each node points to their
+/// two neighbors. If pointers are null pointers, that means
+/// this node is a leaf. The struct itself is pretty bulky, but
+/// it is a must, otherwise, the main algorithm will be changed.
+#[derive(Debug)]
+struct BuddyHeader {
+    // The node's size must be known to fit the requested memory into the block.
+    size: usize,
+    // pointer to the right block, if exist.
+    right: AtomicUsize,
+    // pointer to the left block, if exist.
+    left: AtomicUsize,
+    // A current status of the buddy.
+    status: BuddyStatus,
+}
+
+impl BuddyHeader {
+    #[inline(always)]
+    fn new(self_ptr: usize, left: usize, right: usize, size: usize) -> usize {
+        let node = BuddyHeader { 
+            size: size - NODE_HEADER_SIZE, 
+            left: AtomicUsize::new(left),
+            right: AtomicUsize::new(right),
+            status: BuddyStatus::FREE,
+        };
+
+        unsafe {
+            ptr::write_unaligned(
+                self_ptr as *mut BuddyHeader, 
+                node,
+            )
+        }
+        
+        self_ptr
+    }
+
+    #[inline(always)]
+    fn ref_clone(&self) -> &mut Self {
+        unsafe { (self as *const Self as *mut Self).as_mut().unwrap() }
+    }
+
+    #[inline(always)]
+    fn split(&mut self, arena_size: usize, align_mask: usize) {
+        self.status = BuddyStatus::LEFT; // Starting with left first.
+
+        // Allocating the left buddy.
+        let lptr = (self as *const BuddyHeader as usize) + NODE_HEADER_SIZE; 
+        // Allocating the right buddy.
+        let rptr = lptr + (self.size / 2); 
+
+        let left_buddy = BuddyHeader::new(
+            lptr & align_mask,
+            0, 0,
+            (self.size / 2),
+        );
+
+        let right_buddy = BuddyHeader::new(
+            rptr & align_mask,
+            0, 0,
+            (self.size / 2),
+        );
+
+        // Now we can change the pointers.
+        self.left.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |_| Some(left_buddy));
+        self.right.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |_| Some(right_buddy));
+    }
+
+    #[inline]
+    fn search(&mut self, status: BuddyStatus, arena_size: usize, alloc_size: usize) -> Result<&mut BuddyHeader, ()> {
+        // If the node is divided, checking the left side first and then the right
+        // one. Other splitted nodes are in high priority, as they do not require
+        // further splitting for buddies.
+
+        'main: loop {
+            let side = match status {
+                BuddyStatus::RIGHT => self.right.load(Ordering::Acquire),
+                BuddyStatus::LEFT => self.left.load(Ordering::Acquire),
+                _ => unreachable!(),
+            };
+
+            if let Some(next_buddy) = unsafe { (side as *mut BuddyHeader).as_mut() } {
+                match next_buddy.status {
+                    l @ BuddyStatus::LEFT => {
+                        if (next_buddy.size / 2).saturating_sub(NODE_HEADER_SIZE) >= alloc_size { 
+                            // Going to all different leaves until finding siutable place.
+                            if let Ok(n) = next_buddy.search(l, arena_size, alloc_size) {
+                                self.status = BuddyStatus::RIGHT;
+                                return Ok(n)
+                            }
+                        }
+                    },
+                    r @ BuddyStatus::RIGHT => {
+                        if (next_buddy.size / 2).saturating_sub(NODE_HEADER_SIZE) >= alloc_size { 
+                            // Going to all different leaves until finding siutable place.
+                            if let Ok(n) = next_buddy.search(r, arena_size, alloc_size) {
+                                self.status = BuddyStatus::LEFT; 
+                                return Ok(n)
+                            }
+                        }
+                    }, 
+                    BuddyStatus::FREE => {
+                        return Ok(next_buddy);
+                    }, // We cannot go wrong with a free one.
+                    BuddyStatus::BLOCKED => {
+                        if status != BuddyStatus::RIGHT {
+                            return self.search(BuddyStatus::RIGHT, arena_size, alloc_size)
+                        } else {
+                            break 'main
+                        }
+                    },
+                }
+            } else {
+                // This can only happen in a multi-threaded environment. Repeating.
+                continue 'main
+            }
+        }
+
+        return Err(())
+    }
+}
+
+/// Three states in which a buddy can be.
+///
+/// Each status gives a proper info to the allocator,
+/// so new allocations will appear in right places.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BuddyStatus {
+    /// Basically mean a whole free clean block.
+    FREE,
+    /// Tells the allocator to search on the left.
+    LEFT,
+    /// Tells the allocator to search on the right.
+    RIGHT,
+    /// Tells the allocator that both buddies are allocated.
+    BLOCKED,
+}
+
+/// Buddy allocator structure.
+///
+/// This structure is an interface for special concurrent
+/// binary tree, which is used to define memory regions.
+///
+/// The allocator is using a buddy allocator's algorithm,
+/// which means it will divide it's memory regions by two,
+/// until the best possible memory region is found for the
+/// requested data size. The binary tree provides a fast way
+/// to allocate the data, as well as providing a waterfall-like
+/// method to deallocate unused regions.
+#[derive(Debug)]
+pub struct BuddyAlloc {
+    heap_start: usize,
+    heap_end: usize,
+    // Pointer to the biggest node, which is closer to the root. 
+    head: AtomicUsize,
+    // Will be false until the first allocation request arrives.
+    initialized: AtomicBool,
+}
+
+impl BuddyAlloc {
+    /// Creates a new instance of free list allocator.
+    pub fn new(heap_start: usize, heap_end: usize) -> Self {
+        Self {
+            head: AtomicUsize::new(0),
+            heap_start, heap_end,
+            initialized: AtomicBool::new(false),
+        }
+    }
+}
+
+unsafe impl Allocator for BuddyAlloc {
+    /// Allocates memory in a free node.
+    /// 
+    /// # Thread safety
+    /// 
+    /// ## This allocation algorithm is lock-free:
+    ///
+    /// Only one writer can split the FREE node into two parts. No readers would be able to
+    /// move on until the node is splitted apart by the writer.
+    fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
+        // Calculate a mask to enforce the required alignment.
+        let align_mask = !(layout.align() - 1);
+
+        // Trying to obtain the head.
+        //
+        // This can only fail at the very first allocation, where there is still no
+        // main header. This will also fail, if there is no more memory to allocate.
+        'main: loop {
+            if let Some(mut node) = unsafe { (self.head.load(Ordering::Acquire) as *mut BuddyHeader).as_mut() } {
+                'inner: loop {
+                    match node.status {
+                        BuddyStatus::FREE => {
+                            // If no further division is possible, allocating the buddy.
+                            if (node.size/2).saturating_sub(NODE_HEADER_SIZE) < layout.size() {
+                                // Marking as used.
+                                node.status = BuddyStatus::BLOCKED;
+
+                                let return_ptr = (node as *const _ as usize + NODE_HEADER_SIZE) & align_mask;
+
+                                #[cfg(debug_assertions)] {
+                                    crate::println!("Allocating {} bytes at {:#x}, with node size of: {} bytes.", layout.size(), return_ptr, node.size);
+                                }
+
+                                return Ok(NonNull::slice_from_raw_parts(
+                                    NonNull::new(return_ptr as *mut u8).unwrap(),
+                                    layout.size(),
+                                ));
+                            } else {
+                                // If possible, dividing in half, and repeating.
+                                node.split(self.arena_size(), align_mask);
+                                continue 'inner
+                            }
+                        },
+                        s @ (BuddyStatus::LEFT | BuddyStatus::RIGHT) => {
+                            // Calling the inner function of the node, which will be recursive.
+                            if let Ok(n) = node.search(s, self.arena_size(), layout.size()) {
+                                node = n;
+                                continue 'inner
+                            }
+
+                            // This is of course impossible, since the logic behind split() method
+                            // will never allow that.
+                            unreachable!("Splitted buddy appears to have no children buddies.");
+                        },
+                        BuddyStatus::BLOCKED => {
+                            // At this point the whole heap is full or fragmented.
+                            return Err(AllocError)
+                        }     
+                    }
+                }
+            } else {
+                // This condition will be only called once at the first allocation. This ensures that
+                // next allocations will be faster and will not require to check this every time.
+                if let Ok(_) = self.initialized.compare_exchange(
+                    false,
+                    true,
+                    Ordering::SeqCst,
+                    Ordering::Relaxed,
+                ) {
+                    let _ = BuddyHeader::new(
+                        self.heap_start & align_mask,
+                        0, 0,
+                        self.arena_size(),
+                    );
+
+                    self.head.compare_exchange(
+                        0,
+                        self.heap_start,
+                        Ordering::SeqCst,
+                        Ordering::Relaxed,
+                    );
+                }
+            }
+        }
+
+        // This part must be unreachable.
+        unreachable!("Breaked out of the main loop.");
+    }
+
+    /// Deallocates the memory by setting the given node as unused.
+    ///
+    /// While searches for the requested memory from the top, merges all buddies, which
+    /// are freed, including the one which is about to be freed by this function call.
+    ///
+    /// TODO!
+    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
+        
+    }
+}
+
+impl SubAllocator for BuddyAlloc {
+    fn arena_size(&self) -> usize {
+        self.heap_end - self.heap_start
+    }
+
+    fn heap_addr(&self) -> usize {
+        self.heap_start
+    }
+}
