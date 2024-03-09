@@ -1,6 +1,6 @@
 #![no_std]
 #![no_main]
-#![allow(non_snake_case)]
+#![allow(non_snake_case, static_mut_refs)]
 #![feature(custom_test_frameworks, used_with_arg, abi_x86_interrupt, asm_const)]
 #![test_runner(notOS::test_runner)]
 #![reexport_test_harness_main = "test_main"]
@@ -30,7 +30,7 @@ use notOS::{
         memory::MEMORY_MANAGEMENT_UNIT, 
         registers::{control, ms},
     }, 
-        GLOBAL_ALLOCATOR, FREE_LIST_ALLOC,
+        GLOBAL_ALLOCATOR, BUDDY_ALLOC,
     };
 
 #[no_mangle]
@@ -69,10 +69,10 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
     // The global allocator is a mutable static that do not use any locking 
     // algorithm, so any operation on it, is unsafe.
     unsafe { 
-        GLOBAL_ALLOCATOR.r#use(&FREE_LIST_ALLOC);
-        FREE_LIST_ALLOC.change_strategy(
-            notOS::kernel_components::memory::allocators::free_list_alloc::SearchStrategy::BEST_FIT
-        );
+        GLOBAL_ALLOCATOR.r#use(&BUDDY_ALLOC);
+        //FREE_LIST_ALLOC.change_strategy(
+        //    notOS::kernel_components::memory::allocators::free_list_alloc::SearchStrategy::BEST_FIT
+        //);
    
         // New MMU structure makes it easier to handle memory related commands.
         MEMORY_MANAGEMENT_UNIT.init(_multiboot_information_address);
@@ -143,24 +143,21 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
         let stack1 = MEMORY_MANAGEMENT_UNIT.allocate_stack(10).unwrap();
 
         let p1 = Process::new_void(stack1, 0, 1, 1, None,
-            |t| {
-                use notOS::kernel_components::task_virtualization::Thread;
+            |_t| {
+                use alloc::boxed::Box;
                 use notOS::Color;
-                println!(Color::MAGENTA; "Start of the main.");
 
-                let handle = t.spawn(|_t| {
-                    // Yielding this thread.
-                    Thread::r#yield();
+                println!(Color::BLUE; "Testing out buddies!!!!");
 
-                    println!(Color::RED; "Hello from the red thread.");
-                });
+                // Allocating something.
+                let boxy1: Box<usize> = Box::new(0);
+                let boxy2: Box<i32> = Box::new(1);
+                let boxy3: Box<u128> = Box::new(2);
 
-                t.spawn(|_t| {
-                    println!(Color::GREEN; "Hello from the green thread.");
-                });
-
-                handle.join().ok();
-                println!(Color::MAGENTA; "End of the main.");
+                // Does nothing for now.
+                drop(boxy2);
+                drop(boxy1);
+                drop(boxy3);
             },
         );
 
