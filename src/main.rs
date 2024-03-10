@@ -152,9 +152,9 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
                 // Allocating something.
                 let boxy1: Box<usize> = Box::new(0);
                 let boxy2: Box<i32> = Box::new(1);
-                let boxy3: Box<u128> = Box::new(2);
+                let boxy3: Box<u8> = Box::new(2);
 
-                // Does nothing for now.
+                // Merges all it can.
                 drop(boxy2);
                 drop(boxy1);
                 drop(boxy3);
