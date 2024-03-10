@@ -11,9 +11,8 @@ use core::ptr::{null_mut, NonNull};
 use core::fmt::Debug;
 
 use super::*;
-use crate::single;
+use crate::{single, critical_section};
 use crate::kernel_components::structures::Single;
-use crate::kernel_components::arch_x86_64::interrupts;
 use core::sync::atomic::{
     AtomicUsize,
     Ordering::SeqCst,
@@ -104,7 +103,7 @@ impl GAllocator {
     pub unsafe fn alloc_with<A>(&self, layout: Layout, allocator: A) -> *mut u8 where 
         A: Allocator
     {
-        interrupts::with_int_disabled(|| {
+        critical_section!(|| {
             match allocator.allocate(layout) {
                 Ok(address) => address.as_mut_ptr(),
                 Err(alloc_error) => panic!("Allocation error: {alloc_error}. Memory overflow.")
@@ -123,7 +122,7 @@ impl GAllocator {
     pub unsafe fn dealloc_with<A>(&self, ptr: *mut u8, layout: Layout, allocator: A) where
         A: Allocator
     {
-        interrupts::with_int_disabled(|| {
+        critical_section!(|| {
             allocator.deallocate(
                 NonNull::new(ptr).unwrap(),
                 layout,
@@ -141,7 +140,7 @@ unsafe impl GlobalAlloc for GAllocator {
     ///
     /// Returns a pointer to the allocated memory block, or panics, if the pointer is null.
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        interrupts::with_int_disabled(|| {
+        critical_section!(|| {
             match self.allocator.allocate(layout) {
                 Ok(address) => address.as_mut_ptr(),
                 Err(alloc_error) => panic!("Allocation error: {alloc_error}. Memory overflow.")
@@ -151,7 +150,7 @@ unsafe impl GlobalAlloc for GAllocator {
 
     /// This function calls the inner allocator's deallocate function.
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        interrupts::with_int_disabled(|| {
+        critical_section!(|| {
             self.allocator.deallocate(
                 NonNull::new(ptr).unwrap(),
                 layout,
@@ -163,14 +162,14 @@ unsafe impl GlobalAlloc for GAllocator {
 unsafe impl Allocator for GAllocator {
     fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, core::alloc::AllocError> {
         unsafe {
-            interrupts::with_int_disabled(|| {
+            critical_section!(|| {
                 self.allocator.allocate(layout)
             })
         }
     }
 
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-        interrupts::with_int_disabled(|| {
+        critical_section!(|| {
             self.allocator.deallocate(ptr, layout)
         });
     }
