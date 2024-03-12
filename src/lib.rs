@@ -128,8 +128,10 @@ pub mod kernel_components {
 
     pub mod sync {
         pub mod mutex;
+        pub mod semaphore;
 
         pub use mutex::{Mutex, MutexGuard};
+        pub use semaphore::{Semaphore};
     }
 
     pub mod memory {
