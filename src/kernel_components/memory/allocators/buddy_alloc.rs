@@ -301,9 +301,9 @@ unsafe impl Allocator for BuddyAlloc {
 
                                 let return_ptr = (node as *const _ as usize + NODE_HEADER_SIZE) & align_mask;
 
-                                #[cfg(debug_assertions)] {
-                                    crate::println!("Allocating {} bytes at {:#x}, with node size of: {} bytes.", layout.size(), return_ptr, node.size);
-                                }
+                                //#[cfg(debug_assertions)] {
+                                //    crate::println!("Allocating {} bytes at {:#x}, with node size of: {} bytes.", layout.size(), return_ptr, node.size);
+                                //}
 
                                 return Ok(NonNull::slice_from_raw_parts(
                                     NonNull::new(return_ptr as *mut u8).unwrap(),
@@ -368,9 +368,9 @@ unsafe impl Allocator for BuddyAlloc {
     ///
     /// TODO!
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-        #[cfg(debug_assertions)] {
-            crate::println!("Deallocating {} bytes from {:#x}", layout.size(), ptr.as_ptr() as usize);
-        }
+        //#[cfg(debug_assertions)] {
+        //    crate::println!("Deallocating {} bytes from {:#x}", layout.size(), ptr.as_ptr() as usize);
+        //}
 
         let node_ptr = (ptr.as_ptr() as usize).saturating_sub(NODE_HEADER_SIZE);
 
