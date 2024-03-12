@@ -138,8 +138,8 @@ impl<'a> Thread<'a> {
     /// # Warn
     /// 
     /// This behavior can be recursive of course and could cause some issues.
-    pub fn spawn<F, T>(&mut self, thread_function: F) -> JoinHandle<T> where 
-        F: (Fn(&mut Thread) -> T) + 'static + Send, T: 'static
+    pub fn spawn<F: 'static, T: 'static>(&mut self, thread_function: F) -> JoinHandle<T> where 
+        F: (Fn(&mut Thread) -> T) + Send
     {
         // If the function returns () makes thread return nothing.
         let mut handle = JoinHandle::new();
