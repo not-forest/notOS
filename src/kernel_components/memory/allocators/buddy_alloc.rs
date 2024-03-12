@@ -52,6 +52,7 @@ single! {
 /// this node is a leaf. The struct itself is pretty bulky, but
 /// it is a must, otherwise, the main algorithm will be changed.
 #[derive(Debug)]
+#[repr(C)]
 struct BuddyHeader {
     // The node's size must be known to fit the requested memory into the block.
     size: usize,
@@ -84,11 +85,6 @@ impl BuddyHeader {
     }
 
     #[inline(always)]
-    fn ref_clone(&self) -> &mut Self {
-        unsafe { (self as *const Self as *mut Self).as_mut().unwrap() }
-    }
-
-    #[inline(always)]
     fn split(&mut self, arena_size: usize, align_mask: usize) {
         self.status = BuddyStatus::LEFT; // Starting with left first.
 
@@ -114,7 +110,67 @@ impl BuddyHeader {
         self.right.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |_| Some(right_buddy));
     }
 
-    #[inline]
+    #[inline(never)]
+    unsafe fn merge(&mut self, status: BuddyStatus, merge_ptr: usize) -> Result<(&mut BuddyHeader, &mut BuddyHeader), ()> {
+        'main: loop {
+            let side = match status {
+                BuddyStatus::RIGHT => self.right.load(Ordering::Acquire),   // Going right.
+                BuddyStatus::LEFT => self.left.load(Ordering::Acquire),     // Going left.
+                BuddyStatus::BLOCKED => self as *const _ as usize,          // Going for the head.
+                _ => unreachable!(),
+            };
+
+            //crate::println!("addr: {:#x}, ptr: {:#x}", side, merge_ptr);
+            if let Some(next_buddy) = unsafe { (side as *mut BuddyHeader).as_mut() } {
+                // Checking for the requested buddy.
+                if side == merge_ptr {
+                    return Ok((self, next_buddy))
+                }
+
+                // Searching the required node.
+                if merge_ptr < (side + NODE_HEADER_SIZE + next_buddy.size / 2 + 10) {
+                    if let Ok((parent_node, left)) = next_buddy.merge(BuddyStatus::LEFT, merge_ptr) {
+                        // Checking the right node.
+                        if let Some(right) = unsafe { (parent_node.right.load(Ordering::Acquire) as *mut BuddyHeader).as_mut() } {
+                            if right.status == BuddyStatus::FREE {
+                                // It is ok to make this one free at that point.
+                                parent_node.status = BuddyStatus::FREE;
+                                // We own them right now, so dropping them is ok
+                                ptr::drop_in_place(left as *mut BuddyHeader);
+                                ptr::drop_in_place(right as *mut BuddyHeader);
+
+                                // Getting higher in a hierarchy.
+                                return Ok((self, parent_node))
+                            }
+                        }
+                    }
+                    return Err(())
+                } else {
+                    if let Ok((parent_node, right)) = next_buddy.merge(BuddyStatus::RIGHT, merge_ptr) {
+                        // Checking the right node.
+                        if let Some(left) = unsafe { (parent_node.left.load(Ordering::Acquire) as *mut BuddyHeader).as_mut() } {
+                            if left.status == BuddyStatus::FREE {
+                                // It is ok to make this one free at that point.
+                                parent_node.status = BuddyStatus::FREE;
+                                // We own them right now, so dropping them is ok
+                                ptr::drop_in_place(left as *mut BuddyHeader);
+                                ptr::drop_in_place(right as *mut BuddyHeader);
+
+                                // Getting higher in a hierarchy.
+                                return Ok((self, parent_node))
+                            }
+                        }
+                    }
+                    return Err(())
+                }
+            } else {
+                return Err(())
+            }
+
+        }
+    }
+
+    #[inline(never)]
     fn search(&mut self, status: BuddyStatus, arena_size: usize, alloc_size: usize) -> Result<&mut BuddyHeader, ()> {
         // If the node is divided, checking the left side first and then the right
         // one. Other splitted nodes are in high priority, as they do not require
@@ -312,7 +368,21 @@ unsafe impl Allocator for BuddyAlloc {
     ///
     /// TODO!
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-        
+        #[cfg(debug_assertions)] {
+            crate::println!("Deallocating {} bytes from {:#x}", layout.size(), ptr.as_ptr() as usize);
+        }
+
+        let node_ptr = (ptr.as_ptr() as usize).saturating_sub(NODE_HEADER_SIZE);
+
+        // Marking the node as freed.
+        if let Some(n) = (node_ptr as *mut BuddyHeader).as_mut() {
+            n.status = BuddyStatus::FREE;
+        }
+
+        if let Some(mut node) = unsafe { (self.head.load(Ordering::Acquire) as *mut BuddyHeader).as_mut() } {
+            // Merging the node.
+            node.merge(BuddyStatus::BLOCKED, node_ptr as usize);
+        }
     }
 }
 

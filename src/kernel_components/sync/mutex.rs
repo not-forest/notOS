@@ -91,6 +91,16 @@ impl<T> Mutex<T> {
 
     /// Returns the current state of the lock.
     pub fn is_locked(&self) -> bool { self.status.load(Ordering::Relaxed) }
+
+    /// Consumes the mutex, obtaining the raw data within.
+    ///
+    /// # Unsafe
+    ///
+    /// This operation is unsafe, because it completely removes all purpose of mutex. Hovewer it is
+    /// very important, if the final state of data must be owned.
+    pub unsafe fn consume(self) -> T {
+        self.data.into_inner()
+    }
 }
 
 impl<'a, T: 'a + ?Sized> Drop for MutexGuard<'a, T> {
