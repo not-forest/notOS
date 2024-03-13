@@ -62,8 +62,7 @@ implement_handler_type!(DivergingHandlerFunctionWithErrCode);
 
 /// A collection of predefined functions that can be used within the gates.
 pub mod predefined {
-    use crate::{println, print, debug, Color};
-    use crate::kernel_components::arch_x86_64::interrupts;
+    use crate::{println, print, debug, Color, critical_section};
     use super::*;
 
     #[no_mangle]
@@ -91,7 +90,7 @@ pub mod predefined {
         stack_frame: InterruptStackFrame,
         error_code: ErrorCode,
     ) {
-        interrupts::with_int_disabled(|| {
+        critical_section!(|| {
             println!(Color::RED; "EXCEPTION: Page Fault");
             debug!(stack_frame);
     
@@ -148,10 +147,10 @@ pub mod software {
     use alloc::boxed::Box;
     use core::any::Any;
 
-    use crate::kernel_components::arch_x86_64::interrupts::{self, interrupt};
+    use crate::kernel_components::arch_x86_64::interrupts::interrupt;
     use crate::kernel_components::memory::EntryFlags;
     use crate::kernel_components::task_virtualization::{Thread, Scheduler, PROCESS_MANAGEMENT_UNIT, PRIORITY_SCHEDULER, ROUND_ROBIN, ThreadState};
-    use crate::{println, print, debug, Color};
+    use crate::{println, print, debug, Color, critical_section};
     use crate::kernel_components::arch_x86_64::controllers::{
         PROGRAMMABLE_INTERRUPT_CONTROLLER,
         PS2,
@@ -188,7 +187,7 @@ pub mod software {
         // With disabled software interrupts, getting a next thread from the scheduler
         // and changing both instruction and stack pointers to the corresponding pointers
         // of that thread.
-        interrupts::with_int_disabled(|| {
+        critical_section!(|| {
             // Getting the lock.
             let mut pmu = PROCESS_MANAGEMENT_UNIT.process_list.lock();
 
@@ -302,7 +301,7 @@ pub mod software {
             )
         );
 
-        interrupt::with_int_disabled(|| {
+        critical_section!(|| {
             // Marking the thread as done executing.
             t.thread_state = ThreadState::FINAL;
 
@@ -343,7 +342,7 @@ pub mod software {
 
         let scancode = PS2::new().read_data();
         
-        interrupts::with_int_disabled(|| {
+        critical_section!(|| {
             let mut keyboard = GLOBAL_KEYBORD.lock();
 
             if let Ok(Some(keycode)) = keyboard.scan_key(scancode) {
