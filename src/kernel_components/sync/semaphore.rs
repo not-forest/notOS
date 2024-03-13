@@ -51,7 +51,7 @@ impl<T> Semaphore<T> {
     /// all thread release the resource, it can be obtained again.
     pub fn wait(&self) -> SemaphoreGuard<T> {
         while self.value.load(Ordering::Acquire) > 0 {
-            Thread::r#yield()
+            Thread::r#yield();
         }
         self.value.fetch_add(1, Ordering::SeqCst);
         self.data.lock()
@@ -66,6 +66,7 @@ impl<T> Semaphore<T> {
             return Err(counter)
         }
 
+        self.value.fetch_add(1, Ordering::SeqCst);
         Ok(self.data.lock())
     }
 
