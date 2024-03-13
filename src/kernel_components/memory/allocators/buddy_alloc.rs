@@ -171,13 +171,13 @@ impl BuddyHeader {
     }
 
     #[inline(never)]
-    fn search(&mut self, status: BuddyStatus, arena_size: usize, alloc_size: usize) -> Result<&mut BuddyHeader, ()> {
+    fn search(&mut self, mut status: BuddyStatus, arena_size: usize, alloc_size: usize) -> Result<&mut BuddyHeader, ()> {
         // If the node is divided, checking the left side first and then the right
         // one. Other splitted nodes are in high priority, as they do not require
         // further splitting for buddies.
 
         'main: loop {
-            let side = match status {
+            let mut side = match status {
                 BuddyStatus::RIGHT => self.right.load(Ordering::Acquire),
                 BuddyStatus::LEFT => self.left.load(Ordering::Acquire),
                 _ => unreachable!(),
@@ -193,6 +193,7 @@ impl BuddyHeader {
                                 return Ok(n)
                             }
                         }
+                        status = BuddyStatus::RIGHT; // Trying to change side.
                     },
                     r @ BuddyStatus::RIGHT => {
                         if (next_buddy.size / 2).saturating_sub(NODE_HEADER_SIZE) >= alloc_size { 
@@ -202,6 +203,7 @@ impl BuddyHeader {
                                 return Ok(n)
                             }
                         }
+                        status = BuddyStatus::LEFT; // Trying to change side.
                     }, 
                     BuddyStatus::FREE => {
                         return Ok(next_buddy);
