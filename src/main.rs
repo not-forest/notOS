@@ -143,21 +143,37 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
         let stack1 = MEMORY_MANAGEMENT_UNIT.allocate_stack(10).unwrap();
 
         let p1 = Process::new_void(stack1, 0, 1, 1, None,
-            |_t| {
-                use alloc::boxed::Box;
+            |t| {
+                use notOS::kernel_components::{sync::Semaphore, task_virtualization::Thread};
                 use notOS::Color;
+                use alloc::sync::Arc;
 
-                println!(Color::BLUE; "Testing out buddies!!!!");
+                // Creating a new semaphore.
+                let semaphore = Arc::new(Semaphore::new(0)); 
 
-                // Allocating something.
-                let boxy1: Box<usize> = Box::new(0);
-                let boxy2: Box<i32> = Box::new(1);
-                let boxy3: Box<u8> = Box::new(2);
+                for i in 0..5 {
+                    let sem = Arc::clone(&semaphore);
 
-                // Merges all it can.
-                drop(boxy2);
-                drop(boxy1);
-                drop(boxy3);
+                    let h = t.spawn(move |_t| {
+                        println!(Color::GREEN; "Thread {} is waiting for the semaphore.", i);
+                        let mut data = sem.wait();
+                        Thread::r#yield(); // Causing thread to yield.
+
+                        println!(Color::GREEN; "Thread {} is in a critical section. Incrementing.", i);
+
+                        *data.as_mut() += 1;
+                        sem.signal(data);
+
+                        println!(Color::GREEN; "Thread {} release.", i);
+                    });
+
+                    // Waiting for every second thread to finish.
+                    if i == 4 {
+                        h.join().ok();
+                    }
+                }
+
+                println!(Color::MAGENTA; "Data joined: {}", *semaphore.wait());
             },
         );
 
