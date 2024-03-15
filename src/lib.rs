@@ -189,7 +189,7 @@ pub mod kernel_components {
         pub use process::{Process, ProcState};
         pub use thread::{Thread, ThreadFn, ThreadState};
         pub use scheduler::{Scheduler, Task};
-        pub use join_handle::JoinHandle;
+        pub use join_handle::{JoinHandle, HandleStack};
 
         pub use round_robin::{ROUND_ROBIN, RoundRobin};
         pub use priority_based_scheduling::{PRIORITY_SCHEDULER, PriorityScheduler};
