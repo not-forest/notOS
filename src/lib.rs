@@ -129,9 +129,11 @@ pub mod kernel_components {
     pub mod sync {
         pub mod mutex;
         pub mod semaphore;
+        pub mod barrier;
 
         pub use mutex::{Mutex, MutexGuard};
         pub use semaphore::{Semaphore};
+        pub use barrier::Barrier;
     }
 
     pub mod memory {
