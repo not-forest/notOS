@@ -8,6 +8,7 @@ use core::cell::RefCell;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 use alloc::boxed::Box;
+use alloc::vec::Vec;
 use alloc::sync::Arc;
 
 use crate::critical_section;
@@ -16,7 +17,7 @@ use crate::kernel_components::memory::stack_allocator::Stack;
 use crate::kernel_components::arch_x86_64::{
     controllers::PROGRAMMABLE_INTERRUPT_CONTROLLER, interrupts::{self, handler_functions::software::task_switch_call},
 };
-use super::{Process, join_handle::{JoinHandle, WriterReference}, PROCESS_MANAGEMENT_UNIT};
+use super::{Process, join_handle::{JoinHandle, HandleStack, WriterReference}, PROCESS_MANAGEMENT_UNIT};
 
 /// A custom trait for thread functions.
 /// 
@@ -110,6 +111,7 @@ impl<'a> Thread<'a> {
     /// # Join Handle
     ///
     /// If the thread must not return anything the join handle is not needed.
+    #[inline]
     pub fn new<F>(process_id: usize, stack: Stack, thread_id: usize, function: F, writer_ref: Option<&'a mut WriterReference>) -> Self where
         F: ThreadFn
     {
@@ -130,6 +132,7 @@ impl<'a> Thread<'a> {
     /// This function will not affect the current thread but provide a fast way to call
     /// a spawn method of the current thread's process. This way the thread never dominates
     /// over the others.
+    ///
     /// # Return
     ///
     /// Returns the join handle of the thread. If thread must return any data, it will return data
@@ -138,6 +141,7 @@ impl<'a> Thread<'a> {
     /// # Warn
     /// 
     /// This behavior can be recursive of course and could cause some issues.
+    #[inline]
     pub fn spawn<F: 'static, T: 'static>(&mut self, thread_function: F) -> JoinHandle<T> where 
         F: (Fn(&mut Thread) -> T) + Send
     {
@@ -163,6 +167,46 @@ impl<'a> Thread<'a> {
         });
 
         handle 
+    }
+
+    /// Spawns many thread which perform the same set of intructions.
+    ///
+    /// Works like spawn function, but instead returns a whole vector of join handles. Provided
+    /// function must have signature: |Thread, D, usize| { /* logic */ }, where D is a local
+    /// variable and usize is the thread number.
+    ///
+    /// # Input variables
+    ///
+    /// User must provide a vector of all local data for each thread. Each value in this vector
+    /// will be the next value from the next thread. This function also automatically provides a
+    /// integer, which corresponds to number of the thread.
+    ///
+    /// The amount of threads is decided based on the amount of local variables within the vector.
+    /// If threads do not need any local variables, it is ok to just not use them as well as
+    /// integers.
+    ///
+    /// # Return
+    ///
+    /// Return value is a vector of join handles. Each handle can be manipulated accordingly.
+    pub fn spawn_many<F: 'static, T: 'static, D: 'static>
+        (&mut self, locals: Vec<D>, thread_function: F) -> HandleStack<T> where 
+            F: (Fn(&mut Thread, D, usize) -> T) + Send + Clone,
+            D: Send + Clone,
+    {
+        let mut v = Vec::new();
+
+        critical_section!(|| {
+            for (i, l) in locals.into_iter().enumerate() {
+                let fun = thread_function.clone();
+                let handle = self.spawn(move |t| { 
+                    fun(t, l.clone(), i)
+                });
+
+                v.push(handle);
+            }
+        });
+
+        HandleStack(v)
     }
 
     /// Function for yielding the thread.
