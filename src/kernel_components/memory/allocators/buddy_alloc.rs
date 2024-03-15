@@ -32,16 +32,16 @@ use core::ptr::{self, NonNull};
 use core::sync::atomic::{AtomicUsize, Ordering, AtomicBool};
 
 /// Start address of the memory heap. Use any address as long as it is not used.
-pub const FREE_LIST_ALLOC_HEAP_START: usize = 0o_000_001_000_000_0000;
+pub const BUDDY_ALLOC_HEAP_START: usize = 0o_000_001_000_000_0000;
 /// Maximal size of the whole arena. Adjust the size as needed.
-pub const FREE_LIST_ALLOC_HEAP_ARENA: usize = 128 * 1024;
+pub const BUDDY_ALLOC_HEAP_ARENA: usize = 128 * 1024;
 /// Constant size of the free-list node.
-const NODE_HEADER_SIZE: usize = mem::size_of::<BuddyHeader>();
+const BUDDY_HEADER_SIZE: usize = mem::size_of::<BuddyHeader>();
 
 single! {
     pub mut BUDDY_ALLOC: BuddyAlloc = BuddyAlloc::new(
-        FREE_LIST_ALLOC_HEAP_START,
-        FREE_LIST_ALLOC_HEAP_START + FREE_LIST_ALLOC_HEAP_ARENA,
+        BUDDY_ALLOC_HEAP_START,
+        BUDDY_ALLOC_HEAP_START + BUDDY_ALLOC_HEAP_ARENA,
     );
 }
 
@@ -68,7 +68,7 @@ impl BuddyHeader {
     #[inline(always)]
     fn new(self_ptr: usize, left: usize, right: usize, size: usize) -> usize {
         let node = BuddyHeader { 
-            size: size - NODE_HEADER_SIZE, 
+            size: size - BUDDY_HEADER_SIZE, 
             left: AtomicUsize::new(left),
             right: AtomicUsize::new(right),
             status: BuddyStatus::FREE,
@@ -89,7 +89,7 @@ impl BuddyHeader {
         self.status = BuddyStatus::LEFT; // Starting with left first.
 
         // Allocating the left buddy.
-        let lptr = (self as *const BuddyHeader as usize) + NODE_HEADER_SIZE; 
+        let lptr = (self as *const BuddyHeader as usize) + BUDDY_HEADER_SIZE; 
         // Allocating the right buddy.
         let rptr = lptr + (self.size / 2); 
 
@@ -128,7 +128,7 @@ impl BuddyHeader {
                 }
 
                 // Searching the required node.
-                if merge_ptr < (side + NODE_HEADER_SIZE + next_buddy.size / 2 + 10) {
+                if merge_ptr < (side + BUDDY_HEADER_SIZE + next_buddy.size / 2 + 10) {
                     if let Ok((parent_node, left)) = next_buddy.merge(BuddyStatus::LEFT, merge_ptr) {
                         // Checking the right node.
                         if let Some(right) = unsafe { (parent_node.right.load(Ordering::Acquire) as *mut BuddyHeader).as_mut() } {
@@ -186,7 +186,7 @@ impl BuddyHeader {
             if let Some(next_buddy) = unsafe { (side as *mut BuddyHeader).as_mut() } {
                 match next_buddy.status {
                     l @ BuddyStatus::LEFT => {
-                        if (next_buddy.size / 2).saturating_sub(NODE_HEADER_SIZE) >= alloc_size { 
+                        if (next_buddy.size / 2).saturating_sub(BUDDY_HEADER_SIZE) >= alloc_size { 
                             // Going to all different leaves until finding siutable place.
                             if let Ok(n) = next_buddy.search(l, arena_size, alloc_size) {
                                 self.status = BuddyStatus::RIGHT;
@@ -196,7 +196,7 @@ impl BuddyHeader {
                         status = BuddyStatus::RIGHT; // Trying to change side.
                     },
                     r @ BuddyStatus::RIGHT => {
-                        if (next_buddy.size / 2).saturating_sub(NODE_HEADER_SIZE) >= alloc_size { 
+                        if (next_buddy.size / 2).saturating_sub(BUDDY_HEADER_SIZE) >= alloc_size { 
                             // Going to all different leaves until finding siutable place.
                             if let Ok(n) = next_buddy.search(r, arena_size, alloc_size) {
                                 self.status = BuddyStatus::LEFT; 
@@ -297,11 +297,11 @@ unsafe impl Allocator for BuddyAlloc {
                     match node.status {
                         BuddyStatus::FREE => {
                             // If no further division is possible, allocating the buddy.
-                            if (node.size/2).saturating_sub(NODE_HEADER_SIZE) < layout.size() {
+                            if (node.size/2).saturating_sub(BUDDY_HEADER_SIZE) < layout.size() {
                                 // Marking as used.
                                 node.status = BuddyStatus::BLOCKED;
 
-                                let return_ptr = (node as *const _ as usize + NODE_HEADER_SIZE) & align_mask;
+                                let return_ptr = (node as *const _ as usize + BUDDY_HEADER_SIZE) & align_mask;
 
                                 //#[cfg(debug_assertions)] {
                                 //    crate::println!("Allocating {} bytes at {:#x}, with node size of: {} bytes.", layout.size(), return_ptr, node.size);
@@ -374,7 +374,7 @@ unsafe impl Allocator for BuddyAlloc {
         //    crate::println!("Deallocating {} bytes from {:#x}", layout.size(), ptr.as_ptr() as usize);
         //}
 
-        let node_ptr = (ptr.as_ptr() as usize).saturating_sub(NODE_HEADER_SIZE);
+        let node_ptr = (ptr.as_ptr() as usize).saturating_sub(BUDDY_HEADER_SIZE);
 
         // Marking the node as freed.
         if let Some(n) = (node_ptr as *mut BuddyHeader).as_mut() {
