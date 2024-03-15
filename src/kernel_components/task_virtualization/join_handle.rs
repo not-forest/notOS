@@ -4,7 +4,7 @@
 use crate::critical_section;
 use super::{ThreadState, Thread};
 
-use alloc::{sync::Arc, boxed::Box};
+use alloc::{sync::Arc, boxed::Box, vec::Vec};
 use core::{borrow::Borrow, error::Error, fmt::Display, cell::UnsafeCell, any::Any, marker::PhantomData};
 
 /// A struct that acts as a return value from every thread.
@@ -147,6 +147,25 @@ impl<T: 'static> JoinHandle<T> {
     }
 }
 
+/// Special struct for multiple join handles.
+///
+/// This struct is just a wrapper around Vec<JoinHandle<T>> that provides convenient methods for
+/// handling multiple threads.
+pub struct HandleStack<T>(pub Vec<JoinHandle<T>>);
+
+impl<T: 'static> HandleStack<T> {
+    /// Joins all handles.
+    ///
+    /// Consumes the Handle Stack and returns a vector of all outputs from all threads. Each join
+    /// will be provided in the same way as a regular join function. It is fair, because it joins
+    /// first handles threads, which were spawned first, so it is a FIFO-like behavior, which is
+    /// usually prefered. 
+    pub fn join_all(mut self) -> Vec<Result<Box<T>, ThreadOutputError>> {
+        self.0.into_iter()
+            .map(|h| {h.join()})
+            .collect()
+    }
+}
+
 /// A helper type for writer.
 pub type WriterReference = ThreadOutput<Box<dyn Any>>; 
-
