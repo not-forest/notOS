@@ -141,7 +141,7 @@ impl<'a> Thread<'a> {
     /// # Warn
     /// 
     /// This behavior can be recursive of course and could cause some issues.
-    #[inline]
+    #[inline(never)]
     pub fn spawn<F: 'static, T: 'static>(&mut self, thread_function: F) -> JoinHandle<T> where 
         F: (Fn(&mut Thread) -> T) + Send
     {
@@ -188,6 +188,7 @@ impl<'a> Thread<'a> {
     /// # Return
     ///
     /// Return value is a vector of join handles. Each handle can be manipulated accordingly.
+    #[inline(never)]
     pub fn spawn_many<F: 'static, T: 'static, D: 'static>
         (&mut self, locals: Vec<D>, thread_function: F) -> HandleStack<T> where 
             F: (Fn(&mut Thread, D, usize) -> T) + Send + Clone,
@@ -219,8 +220,8 @@ impl<'a> Thread<'a> {
     ///
     /// This function will panic only if the interrupts are disabled. Yielding the thread while
     /// interrupts are disabled could break the inner logic of the thread, therefore instead of
-    /// ignoring the software interrupt completely panic occurs.
-    #[inline(always)]
+    /// ignoring the software interrupt completely panic occurs. 
+    #[inline(never)]
     pub fn r#yield() {
         if interrupt::is_interrupts_enabled() {
             let timer_interrupt_int = PROGRAMMABLE_INTERRUPT_CONTROLLER.lock().get_master_offset();
