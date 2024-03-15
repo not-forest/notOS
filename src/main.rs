@@ -144,36 +144,19 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
 
         let p1 = Process::new_void(stack1, 0, 1, 1, None,
             |t| {
-                use notOS::kernel_components::{sync::Semaphore, task_virtualization::Thread};
                 use notOS::Color;
-                use alloc::sync::Arc;
 
-                // Creating a new semaphore.
-                let semaphore = Arc::new(Semaphore::new(0)); 
+                // A vector of local variables for each function.
+                let locals = (0..5).rev().collect();
 
-                for i in 0..5 {
-                    let sem = Arc::clone(&semaphore);
+                let handles = t.spawn_many(locals, move |_t, local, i| {
+                    println!(Color::GREEN; "Thread nr: {} is having a local variable: {}", i, local);
+                });
 
-                    let h = t.spawn(move |_t| {
-                        println!(Color::GREEN; "Thread {} is waiting for the semaphore.", i);
-                        let mut data = sem.wait();
-                        Thread::r#yield(); // Causing thread to yield.
+                // Waiting for all spawned threads.
+                handles.join_all();
 
-                        println!(Color::GREEN; "Thread {} is in a critical section. Incrementing.", i);
-
-                        *data.as_mut() += 1;
-                        sem.signal(data);
-
-                        println!(Color::GREEN; "Thread {} release.", i);
-                    });
-
-                    // Waiting for every second thread to finish.
-                    if i == 4 {
-                        h.join().ok();
-                    }
-                }
-
-                println!(Color::MAGENTA; "Data joined: {}", *semaphore.wait());
+                println!(Color::MAGENTA; "End of the process.");
             },
         );
 
