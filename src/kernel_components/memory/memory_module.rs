@@ -4,10 +4,14 @@ use core::mem::{size_of, MaybeUninit};
 use core::fmt::{Debug, Display};
 use core::error::Error;
 use core::sync::atomic::{AtomicBool, Ordering};
-use crate::kernel_components::arch_x86_64::segmentation::TSS;
+use crate::kernel_components::arch_x86_64::{
+    segmentation::TSS,
+    acpi::rsdt::{ACPITagOld, ACPITagNew},
+};
 use crate::kernel_components::memory::frames::PAGE_SIZE;
 use crate::{VirtualAddress, PhysicalAddress, println};
 use crate::single;
+
 
 use super::{
     Page, ActivePageTable,
@@ -102,13 +106,17 @@ impl MMU {
             EntryFlags,
         };
 
+        // Getting the MMAP tag.
         let memory_map_tag = boot_info.memory_map_tag()
         .expect("Memory map tag required.");
 
+        // Getting kernel boundaries
         let kernel_start = boot_info.kstart();
         let kernel_end = boot_info.kend();
+        // Getting multiboot2 boundaries.
         let multiboot_start = boot_info.mstart();
         let multiboot_end = boot_info.mend();
+        // Getting heap boundaties.
         let heap_start = unsafe { GLOBAL_ALLOCATOR.heap_addr };
         let heap_end = heap_start + unsafe{ GLOBAL_ALLOCATOR.arena_size };
 
@@ -328,6 +336,16 @@ impl MMU {
 
         active_table
     }
+
+    /// Gets a tag of the rsdp pointer, which is copied by multiboot2 during boot process.
+    pub(crate) fn get_rsdp(&self) -> Option<&ACPITagOld> {
+        self.info_pointer.get_tag::<ACPITagOld>()
+    }
+
+    /// Gets a tag of the xsdp pointer, which is copied by multiboot2 during boot process.
+    pub(crate) fn get_xsdp(&self) -> Option<&ACPITagNew> {
+        self.info_pointer.get_tag::<ACPITagNew>()
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -456,7 +474,17 @@ impl<'a> InfoPointer<'a> {
     pub fn mend(&self) -> usize {
         self.mstart() + ( self.total() as usize )
     }
-    
+   
+    /// Returns an old ACPI tag, which contains RSDP pointer of ACPI v1.0
+    pub fn acpi_old(&self) -> Option<&ACPITagOld> {
+        self.get_tag::<ACPITagOld>()
+    }
+
+    /// Returns a new ACPI tag, which caintains XSDP pinter of ACPI v2.0
+    pub fn acpi_new(&self) -> Option<&ACPITagNew> {
+        self.get_tag::<ACPITagNew>()
+    }
+
     fn tags(&self) -> TagIter {
         TagIter::new(&self.0.tags)
     }
