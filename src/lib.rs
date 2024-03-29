@@ -2,7 +2,7 @@
 #![no_std]
 #![cfg_attr(test, no_main)]
 #![allow(incomplete_features, unused, non_snake_case)]
-#![feature(custom_test_frameworks, used_with_arg, error_in_core, ptr_metadata, 
+#![feature(custom_test_frameworks, used_with_arg, error_in_core, ptr_metadata, non_null_convenience, 
     generic_const_exprs, allocator_api, slice_ptr_get, maybe_uninit_array_assume_init, 
     abi_x86_interrupt, asm_const, type_alias_impl_trait, tuple_trait, unboxed_closures)]
 #![test_runner(crate::test_runner)]
@@ -73,6 +73,13 @@ pub mod kernel_components {
         pub mod post;
         pub mod ports;
         pub mod TLB;
+
+        pub mod acpi {
+            pub mod acpi;
+            pub mod rsdt;
+
+            pub use acpi::{ACPI, RXSDT};
+        }
 
         pub mod interrupts {
             pub mod handler_functions;
