@@ -140,23 +140,18 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
         PROGRAMMABLE_INTERRUPT_CONTROLLER.lock().reinit_chained(32).remap();
     
         use notOS::kernel_components::task_virtualization::{Process, PROCESS_MANAGEMENT_UNIT};
-        let stack1 = MEMORY_MANAGEMENT_UNIT.allocate_stack(10).unwrap();
+        let stack1 = MEMORY_MANAGEMENT_UNIT.allocate_stack(1).unwrap();
+
 
         let p1 = Process::new_void(stack1, 0, 1, 1, None,
-            |t| {
+            |_t| {
                 use notOS::Color;
+                use notOS::kernel_components::arch_x86_64::acpi::RXSDT;
 
-                // A vector of local variables for each function.
-                let locals = (0..5).rev().collect();
+                let rsdt = RXSDT::new_rsdt();
 
-                let handles = t.spawn_many(locals, move |_t, local, i| {
-                    println!(Color::GREEN; "Thread nr: {} is having a local variable: {}", i, local);
-                });
+                println!(Color::GREEN; "{:#?}", rsdt);
 
-                // Waiting for all spawned threads.
-                handles.join_all();
-
-                println!(Color::MAGENTA; "End of the process.");
             },
         );
 
