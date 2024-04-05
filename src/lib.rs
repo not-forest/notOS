@@ -45,6 +45,7 @@ extern crate alloc;
 /// Main entry point for outer structures and objects
 pub mod kernel_components {
     pub mod vga_buffer;
+    pub mod os;
 
     pub mod structures {
         pub mod single;
@@ -75,10 +76,11 @@ pub mod kernel_components {
         pub mod TLB;
 
         pub mod acpi {
+            mod rsdp;
             pub mod acpi;
             pub mod rsdt;
 
-            pub use acpi::{ACPI, RXSDT};
+            pub use acpi::{ACPI, XSDT, RSDT};
         }
 
         pub mod interrupts {
