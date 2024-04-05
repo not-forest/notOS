@@ -1,150 +1,148 @@
+use alloc::borrow::ToOwned;
 /// Custom module that implements RSDT table. It contains pointers to all system
 /// description tables.
 
 use alloc::vec::Vec;
-use super::acpi::{ACPISDTHeader, Signature, OEMId};
-use crate::kernel_components::memory::{
-    tags::{TagTrait, TagType, TagTypeId, Tag},
-    memory_module::MEMORY_MANAGEMENT_UNIT,
-};
+use super::acpi::{ACPISDTHeader, SDTValidationError, Signature, SystemDescriptionTable};
+use super::rsdp::{RSDP, XSDP};
 use crate::critical_section;
 
 use core::ptr;
 
+pub use super::rsdp::{ACPITagNew, ACPITagOld};
+
 /// Root/Extended Root System Description Table.
 ///
 /// Data structure used in the ACPI programming interface, which contains pointers
-/// to all other SDTs. It might have different size of it's fields based on the
-/// current ACPI version.
+/// to all other SDTs. This is a legacy version of newer XSDT table, which use 32-bit
+/// addresses so it is not used anymore.
+#[repr(C)]
 #[derive(Debug, Clone)]
-pub struct RXSDT {
+pub struct RSDT {
     /// RSDT has 8-byte signature header.
     header: ACPISDTHeader,
-    /// Pointers to other system description tables.
-    ptrs: SDTPointers,
+    /// Pointers for ACPI version 1.0
+    ptrs: [*mut u32; 1],
 }
 
-impl RXSDT {
+impl SystemDescriptionTable for RSDT {
+    const SIGNATURE: &'static str = "RSDT";
+}
+
+impl RSDT {
     /// Reads the current value of RSDT.
     ///
     /// If ACPI < 2.0 is used, this version is required.
-    pub unsafe fn new_rsdt() -> Self {
+    pub fn new() -> Self {
         // Critical section, because reading from the MMU.
         let rsdp = critical_section!(|| {
             RSDP::new()
         }).expect("Unable to read from RSDP.");
 
-        ptr::read(rsdp.ptr as *mut RXSDT) 
+        unsafe { ptr::read_unaligned(rsdp.ptr as *mut RSDT) } 
     }
+    
+    /// Finds the requested SDT table. 
+    ///
+    /// This function does all validation checks and return the result accordingly.
+    ///
+    /// # Returns
+    ///
+    /// Will return an error if table was found but its validation failed. Will return
+    /// Ok(None) if table was not found for some reason. Will return Ok(&T), where T is
+    /// expected to be another SDT. 
+    fn find<T>(&self) -> Result<Option<&mut T>, SDTValidationError> where 
+        T: SystemDescriptionTable
+    {
+        for ptr in self.ptrs.into_iter().map(|ptr| ptr.cast::<ACPISDTHeader>()) {
+            if let Some(header) = unsafe { ptr.as_ref() } {
+                // If signature matches the header signature, checking the obtained SDT and
+                // returning it if validated.
+                if header.signature == *T::SIGNATURE {
+                    // No it is necessary to validate the header fully.
+                    match T::validate(header) {
+                        Ok(_) => {
+                            let sdt = unsafe {
+                                // Here we are free to cast the header pointer as the SDT.
+                                ptr.cast::<T>().as_mut().unwrap()
+                            };
+                            return Ok(Some(sdt));
+                        },
+                        Err(e) => return Err(e),
+                    }
+                }
+            }
+        }
 
+        Ok(None)
+    }
+}
+
+
+/// Extended Root System Description Table.
+///
+/// Data structure used in the ACPI programming interface 2.0, which contains pointers
+/// to all other SDTs. This version is used in x86_64 systems as a substitution of legacy
+/// 1.0 RSDT.
+#[derive(Debug, Clone)]
+#[repr(C)]
+pub struct XSDT {
+    /// XSDT has 8-byte signature header.
+    header: ACPISDTHeader,
+    /// Pointers for ACPI version 2.0
+    ptrs: [*mut usize; 1],
+}
+
+impl SystemDescriptionTable for XSDT {
+    const SIGNATURE: &'static str = "XSDT";
+}
+
+impl XSDT {
     /// Reads the current value of XSDT.
     ///
     /// If ACPI 2.0 is used, this version is required.
-    pub unsafe fn new_xsdt() -> Self {
+    pub fn new() -> Self {
         // Critical section, because reading from the MMU.
         let xsdp = critical_section!(|| {
             XSDP::new()
         }).expect("Unable to read from XSDP.");
 
-        ptr::read(xsdp.ptr as *mut RXSDT)
-    }
-}
+        unsafe { ptr::read_unaligned(xsdp.ptr as *mut XSDT) }
+    } 
 
-/// Special pointer which points to the RSDT structure in ACPI version 1.0
-#[repr(C)]
-#[derive(Debug, Clone)]
-struct RSDP {
-    signature: [char; 8],
-    /// Version 1.0 checksum
-    checksum: u8,
-    /// OEM-supplied string that identifies the OEM
-    oem_id: OEMId,
-    /// SDTs revision.
-    revision: u8,
-    /// An actual pointer to the RSDT structure. Deprecated since version 2.0
-    ptr: u32,
-}
-
-impl RSDP {
-    /// Obtains the RSDP pointer from the MMU.
-    fn new() -> Option<Self> {
-        if let Some(tag) = unsafe { MEMORY_MANAGEMENT_UNIT.get_rsdp() } { 
-            crate::println!("{:#?}, {:#?}, {:#?}", tag.size, tag.tag_type, tag.rsdp);
-            return Some(tag.rsdp.clone())
+    /// Finds the requested SDT table. 
+    ///
+    /// This function does all validation checks and return the result accordingly.
+    ///
+    /// # Returns
+    ///
+    /// Will return an error if table was found but its validation failed. Will return
+    /// Ok(None) if table was not found for some reason. Will return Ok(&T), where T is
+    /// expected to be another SDT. 
+    fn find<T>(&self) -> Result<Option<&mut T>, SDTValidationError> where 
+        T: SystemDescriptionTable
+    {
+        for ptr in self.ptrs.into_iter().map(|ptr| ptr.cast::<ACPISDTHeader>()) {
+            if let Some(header) = unsafe { ptr.as_ref() } {
+                // If signature matches the header signature, checking the obtained SDT and
+                // returning it if validated.
+                if header.signature == *T::SIGNATURE {
+                    // No it is necessary to validate the header fully.
+                    match T::validate(header) {
+                        Ok(_) => {
+                            let sdt = unsafe {
+                                // Here we are free to cast the header pointer as the SDT.
+                                ptr.cast::<T>().as_mut().unwrap()
+                            };
+                            return Ok(Some(sdt));
+                        },
+                        Err(e) => return Err(e),
+                    }
+                }
+            }
         }
-        None
+
+        Ok(None)
     }
-}
 
-/// Special pointer which points to the XSDT structure in ACPI version 2.0
-#[repr(C)]
-#[derive(Debug, Clone)]
-struct XSDP {
-    /// All fields in RSDP are also present in XSDT, hovewer the ptr field is deprecated.
-    legacy: RSDP,
-    /// The size of the entire table since offset 0 to the end.
-    length: u32,
-    /// An actual pointer to the XSDT structure.
-    ptr: u64,
-    /// Extended checksum.
-    xchecksum: u8,
-    _reserved: [u8; 3],
-}
-
-impl XSDP {
-    /// Obtains the RSDP pointer from the MMU.
-    fn new() -> Option<Self> {
-        if let Some(tag) = unsafe { MEMORY_MANAGEMENT_UNIT.get_xsdp() } {
-            crate::println!("{:#?}, {:#?}, {:#?}", tag.size, tag.tag_type, tag.xsdp);
-            return Some(tag.xsdp.clone())
-        }
-        None
-    }
-}
-
-/// Enum that consists of pointers to other SDTs.
-///
-/// The amount of those pointers vary, because RSDT can be obtained either with
-/// RSDP or XSDP. This is different in different versions of ACPI.
-#[derive(Debug, Clone)]
-
-enum SDTPointers {
-    /// Pointers for ACPI version 1.0
-    Ver1(Vec<u32>),
-    /// Pointers for ACPI version 2.0
-    Ver2(Vec<usize>),
-}
-
-/// Tag which contains a copy of RSDP pointer for ACPI v1.0
-///
-/// This is the tag from multiboot2 structure. It must be used to obtain the RSDP
-/// pointer for legacy ACPI v1.0
-#[derive(Clone)]
-#[repr(C)]
-pub struct ACPITagOld {
-    pub tag_type: TagTypeId,
-    pub size: u32,
-    rsdp: RSDP,
-}
-
-impl TagTrait for ACPITagOld {
-    const ID: TagType = TagType::AcpiOld;
-    fn dst_size(tag: &Tag) {}
-}
-
-/// Tag which contains a copy of XSDP pointer for ACPI v2.0
-///
-/// This is the tag from multiboot2 structure. It must be used to obtain the XSDP
-/// pointer for legacy ACPI v2.0
-#[derive(Clone)]
-#[repr(C)]
-pub struct ACPITagNew {
-    pub tag_type: TagTypeId,
-    pub size: u32,
-    xsdp: XSDP,
-}
-
-impl TagTrait for ACPITagNew {
-    const ID: TagType = TagType::AcpiNew;
-    fn dst_size(tag: &Tag) {}
 }
