@@ -4,6 +4,7 @@ use core::mem::{size_of, MaybeUninit};
 use core::fmt::{Debug, Display};
 use core::error::Error;
 use core::sync::atomic::{AtomicBool, Ordering};
+use crate::kernel_components::arch_x86_64::acpi::RSDT;
 use crate::kernel_components::arch_x86_64::{
     segmentation::TSS,
     acpi::rsdt::{ACPITagOld, ACPITagNew},
@@ -253,6 +254,7 @@ impl MMU {
     fn remap_kernel<A>(allocator: &mut A, boot_info: &InfoPointer) -> ActivePageTable
         where A: FrameAlloc
     {
+        use crate::kernel_components::arch_x86_64::acpi::rsdp::{RSDP, XSDP};
         use crate::Color;
 
         let mut temporary_page = TempPage::new( Page::containing_address(0xdeadbeaf), allocator);
@@ -322,6 +324,19 @@ impl MMU {
             let vga_buffer_frame = Frame::info_address(0xb8000);
             mapper.indentity_map(vga_buffer_frame, WRITABLE, allocator);
 
+            // identity map the XSDT/RSDT.
+            if let Some(x) = boot_info.get_tag::<ACPITagNew>() {
+                let xsdt_frame = Frame::info_address(x.xsdp.ptr as usize);
+                mapper.indentity_map(xsdt_frame, WRITABLE, allocator);
+            } else {
+                crate::warn!("XSDT is not present, mapping the legacy RSDT instead.");
+                if let Some(r) = boot_info.get_tag::<ACPITagOld>() {
+                    let rsdt_frame = Frame::info_address(r.rsdp.ptr as usize);
+                    mapper.indentity_map(rsdt_frame, WRITABLE, allocator);
+                } else {
+                    panic!("RSDT is not present. Unable to identity map.");
+                }
+            }
         });
 
         let old_table = active_table.switch(new_table);
