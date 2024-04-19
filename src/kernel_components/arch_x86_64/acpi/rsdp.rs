@@ -37,8 +37,6 @@ impl RSDP {
     /// Obtains the RSDP pointer from the MMU.
     pub(crate) fn new() -> Result<Self, RootPointerError> {
         if let Some(tag) = unsafe { MEMORY_MANAGEMENT_UNIT.get_rsdp() } { 
-            crate::println!("{:#?}, {:#?}, {:#x?}", tag.size, tag.tag_type, tag.rsdp);
-            
             let rsdp = tag.rsdp.clone();
 
             // Validating the rsdp right away.
@@ -106,12 +104,18 @@ pub(crate) struct XSDP {
 
 impl XSDP {
     /// Obtains the XSDP pointer from the MMU.
-    pub(crate) fn new() -> Option<Self> {
-        if let Some(tag) = unsafe { MEMORY_MANAGEMENT_UNIT.get_xsdp() } {
-            crate::println!("{:#?}, {:#?}, {:#x?}", tag.size, tag.tag_type, tag.xsdp);
-            return Some(tag.xsdp.clone())
+    pub(crate) fn new() -> Result<Self, RootPointerError> {
+        if let Some(tag) = unsafe { MEMORY_MANAGEMENT_UNIT.get_xsdp() } { 
+            let xsdp = tag.xsdp.clone();
+
+            // Validating the rsdp right away.
+            match xsdp.validate() {
+                Ok(_) => Ok(xsdp),
+                Err(e) => Err(e),
+            }
+        } else {
+            Err(RootPointerError::NOTAG)
         }
-        None
     }
 
     /// Returns true if checksum is valid.
@@ -150,9 +154,9 @@ impl XSDP {
 #[derive(Clone)]
 #[repr(C)]
 pub struct ACPITagOld {
-    pub tag_type: TagTypeId,
-    pub size: u32,
-    rsdp: RSDP,
+    tag_type: TagTypeId,
+    size: u32,
+    pub rsdp: RSDP,
 }
 
 impl TagTrait for ACPITagOld {
@@ -167,9 +171,9 @@ impl TagTrait for ACPITagOld {
 #[derive(Clone)]
 #[repr(C)]
 pub struct ACPITagNew {
-    pub tag_type: TagTypeId,
-    pub size: u32,
-    xsdp: XSDP,
+    tag_type: TagTypeId,
+    size: u32,
+    pub xsdp: XSDP,
 }
 
 impl TagTrait for ACPITagNew {
