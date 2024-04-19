@@ -2,13 +2,12 @@ use alloc::borrow::ToOwned;
 /// Custom module that implements RSDT table. It contains pointers to all system
 /// description tables.
 
-use alloc::vec::Vec;
+use alloc::boxed::Box;
 use super::acpi::{ACPISDTHeader, SDTValidationError, Signature, SystemDescriptionTable};
 use super::rsdp::{RSDP, XSDP};
 use crate::critical_section;
 
 use core::ptr;
-
 pub use super::rsdp::{ACPITagNew, ACPITagOld};
 
 /// Root/Extended Root System Description Table.
@@ -22,7 +21,7 @@ pub struct RSDT {
     /// RSDT has 8-byte signature header.
     header: ACPISDTHeader,
     /// Pointers for ACPI version 1.0
-    ptrs: [*mut u32; 1],
+    ptrs: Box<[*mut u32]>,
 }
 
 impl SystemDescriptionTable for RSDT {
@@ -54,7 +53,7 @@ impl RSDT {
     fn find<T>(&self) -> Result<Option<&mut T>, SDTValidationError> where 
         T: SystemDescriptionTable
     {
-        for ptr in self.ptrs.into_iter().map(|ptr| ptr.cast::<ACPISDTHeader>()) {
+        for ptr in self.ptrs.iter().map(|ptr| ptr.cast::<ACPISDTHeader>()) {
             if let Some(header) = unsafe { ptr.as_ref() } {
                 // If signature matches the header signature, checking the obtained SDT and
                 // returning it if validated.
@@ -90,7 +89,7 @@ pub struct XSDT {
     /// XSDT has 8-byte signature header.
     header: ACPISDTHeader,
     /// Pointers for ACPI version 2.0
-    ptrs: [*mut usize; 1],
+    ptrs: Box<[*mut usize]>,
 }
 
 impl SystemDescriptionTable for XSDT {
@@ -122,7 +121,7 @@ impl XSDT {
     fn find<T>(&self) -> Result<Option<&mut T>, SDTValidationError> where 
         T: SystemDescriptionTable
     {
-        for ptr in self.ptrs.into_iter().map(|ptr| ptr.cast::<ACPISDTHeader>()) {
+        for ptr in self.ptrs.iter().map(|ptr| ptr.cast::<ACPISDTHeader>()) {
             if let Some(header) = unsafe { ptr.as_ref() } {
                 // If signature matches the header signature, checking the obtained SDT and
                 // returning it if validated.
