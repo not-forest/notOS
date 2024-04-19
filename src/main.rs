@@ -158,10 +158,10 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
 
                 println!(Color::GREEN; "{:#?}", rsdt);
             },
-        );
+        ); */
 
         // Pushing the process to the queue.
-        PROCESS_MANAGEMENT_UNIT.queue(p1); */
+        //PROCESS_MANAGEMENT_UNIT.queue(p1);
     }
 
     loop {
