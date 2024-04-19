@@ -28,6 +28,11 @@ pub trait SystemDescriptionTable {
     fn validate(header: &ACPISDTHeader) -> Result<(), SDTValidationError> {
         use SDTValidationError::*;
 
+        // Signature check.
+        if header.signature != *Self::SIGNATURE {
+            return Err(SIGNATURE)
+        }
+        // Checksum check.
         if !Self::checksum(header) {
             return Err(CHECKSUM)
         }
@@ -68,7 +73,7 @@ pub struct ACPISDTHeader {
     /// 4 byte or 8 byte signature field, which defines which table is being used.
     pub signature: Signature,
     /// The size of the entire table.
-    length: u32,
+    pub length: u32,
     /// The revision of the ACPI.
     revision: u8,
     /// All bytes of the table summed must be equal to 0. 
@@ -85,7 +90,7 @@ pub struct ACPISDTHeader {
 /// it is useing at this moment.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Signature {
+pub enum Signature {
     /// Most ACPI tables use this.
     Default([UChar; 4]),
     /// Special only for RSDT table.
@@ -105,7 +110,8 @@ impl PartialEq<str> for Signature {
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SDTValidationError {
-    /// 8 bit checksum field is wrong. 
-    /// All bytes of the table summed must be equal to 0
+    /// 8 bit checksum field is wrong. All bytes of the table summed must be equal to 0
     CHECKSUM,
+    /// The signature does not match the trait's signature and therefore wrong.
+    SIGNATURE,
 }
