@@ -76,7 +76,7 @@ pub mod kernel_components {
         pub mod TLB;
 
         pub mod acpi {
-            mod rsdp;
+            pub mod rsdp;
             pub mod acpi;
             pub mod rsdt;
 
