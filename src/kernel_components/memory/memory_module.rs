@@ -1,19 +1,21 @@
 // Memory module for memory management. This is the entry point of memory functions and structs. 
 
-use core::mem::{size_of, MaybeUninit};
+use core::mem::{self, size_of, MaybeUninit};
 use core::fmt::{Debug, Display};
 use core::error::Error;
 use core::sync::atomic::{AtomicBool, Ordering};
-use crate::kernel_components::arch_x86_64::acpi::RSDT;
 use crate::kernel_components::arch_x86_64::{
     segmentation::TSS,
     acpi::rsdt::{ACPITagOld, ACPITagNew},
+    acpi::{RSDT, XSDT, acpi::ACPISDTHeader},
 };
 use crate::kernel_components::memory::frames::PAGE_SIZE;
 use crate::{VirtualAddress, PhysicalAddress, println};
 use crate::single;
 
 
+use super::frames::FrameIter;
+use super::EntryFlags;
 use super::{
     Page, ActivePageTable,
     tags::{EndTag, TagTrait, TagIter}, 
@@ -257,7 +259,7 @@ impl MMU {
         use crate::kernel_components::arch_x86_64::acpi::rsdp::{RSDP, XSDP};
         use crate::Color;
 
-        let mut temporary_page = TempPage::new( Page::containing_address(0xdeadbeaf), allocator);
+        let mut temporary_page = TempPage::new( Page::containing_address(0xdeadbeef), allocator);
         let mut active_table = unsafe { ActivePageTable::new() };
         let mut new_table = {
             let frame = allocator.alloc().expect("no more frames to allocate.");
@@ -324,15 +326,35 @@ impl MMU {
             let vga_buffer_frame = Frame::info_address(0xb8000);
             mapper.indentity_map(vga_buffer_frame, WRITABLE, allocator);
 
-            // identity map the XSDT/RSDT.
+            #[cfg(debug_assertions)] {
+                println!(Color::LIGHTGREEN; "Mapping ACPI tables.");
+            }
+
+            // identity map the XSDT/RSDT and the rest of ACPI tables.
+            //
+            // We would have to go one by one for each ACPI table. Because of that
+            // RSDT is necessary to obtain all pointers to all tables and map them
+            // individually.
             if let Some(x) = boot_info.get_tag::<ACPITagNew>() {
-                let xsdt_frame = Frame::info_address(x.xsdp.ptr as usize);
-                mapper.indentity_map(xsdt_frame, WRITABLE, allocator);
+                    // Have to firstly map the table before actually using it.
+                    let xsdt_start = Frame::info_address(x.xsdp.ptr as usize);
+                    let header = unsafe { (x.xsdp.ptr as *mut ACPISDTHeader).as_mut() }.unwrap();
+                    let xsdt_end = Frame::info_address(xsdt_start.num + header.length as usize);
+
+                    for frame in Frame::range_inclusive(xsdt_start, xsdt_end) {
+                        mapper.indentity_map(frame, PRESENT, allocator);
+                    }
             } else {
                 crate::warn!("XSDT is not present, mapping the legacy RSDT instead.");
                 if let Some(r) = boot_info.get_tag::<ACPITagOld>() {
-                    let rsdt_frame = Frame::info_address(r.rsdp.ptr as usize);
-                    mapper.indentity_map(rsdt_frame, WRITABLE, allocator);
+                    // Have to firstly map the table before actually using it.
+                    let rsdt_start = Frame::info_address(r.rsdp.ptr as usize);
+                    let header = unsafe { (r.rsdp.ptr as *mut ACPISDTHeader).as_mut() }.unwrap();
+                    let rsdt_end = Frame::info_address(rsdt_start.num + header.length as usize);
+
+                    for frame in Frame::range_inclusive(rsdt_start, rsdt_end) {
+                        mapper.indentity_map(frame, PRESENT, allocator);
+                    }
                 } else {
                     panic!("RSDT is not present. Unable to identity map.");
                 }
