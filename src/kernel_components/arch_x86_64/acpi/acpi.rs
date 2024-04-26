@@ -13,6 +13,7 @@ use crate::{
 
 pub use super::{
     rsdt::{RSDT, XSDT},
+    fadt::{FADT, PPMP},
 };
 
 /// Custom trait for all system description tables defined by ACPI specification.
@@ -92,6 +93,7 @@ pub struct ACPISDTHeader {
 /// different registers in ACPI. It provides the platform with a robust means 
 /// to describe register locations. This structure is used to express register 
 /// addresses within tables defined by ACPI.
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct GenericAddressStructure {
     /// The address space where the data structure or register exists.
     addr_space: AddressSpaceID,
