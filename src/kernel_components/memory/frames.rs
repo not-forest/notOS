@@ -13,14 +13,22 @@ pub struct Frame {
 }
 
 impl Frame {
+    /// Returns a frame of the provided address.
     pub fn info_address(address: usize) -> Self {
         Self { num: address / PAGE_SIZE }
     }
 
+    /// Returns the next frame, which comes after the current one.
+    pub fn next(&self) -> Frame {
+        Frame { num: self.num + 1 }
+    }
+
+    /// Gives a physical address of this frame.
     pub fn start_address(&self) -> PhysicalAddress {
         self.num * PAGE_SIZE
     }
 
+    /// Provides an iterator over some memory region of frames.
     pub fn range_inclusive(start: Frame, end: Frame) -> FrameIter {
         FrameIter { start, end }
     }
