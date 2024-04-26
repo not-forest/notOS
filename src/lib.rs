@@ -79,8 +79,9 @@ pub mod kernel_components {
             pub mod rsdp;
             pub mod acpi;
             pub mod rsdt;
+            pub mod fadt;
 
-            pub use acpi::{ACPI, XSDT, RSDT};
+            pub use acpi::{ACPI, XSDT, RSDT, FADT};
         }
 
         pub mod interrupts {
