@@ -176,12 +176,18 @@ impl BuddyHeader {
         // one. Other splitted nodes are in high priority, as they do not require
         // further splitting for buddies.
 
+        let mut tries = 0; 
         'main: loop {
             let mut side = match status {
                 BuddyStatus::RIGHT => self.right.load(Ordering::Acquire),
                 BuddyStatus::LEFT => self.left.load(Ordering::Acquire),
                 _ => unreachable!(),
             };
+
+            // Amount of tries before exiting this block.
+            if tries > 2 {
+                break 'main
+            }
 
             if let Some(next_buddy) = unsafe { (side as *mut BuddyHeader).as_mut() } {
                 match next_buddy.status {
@@ -194,6 +200,7 @@ impl BuddyHeader {
                             }
                         }
                         status = BuddyStatus::RIGHT; // Trying to change side.
+                        tries += 1;
                     },
                     r @ BuddyStatus::RIGHT => {
                         if (next_buddy.size / 2).saturating_sub(BUDDY_HEADER_SIZE) >= alloc_size { 
@@ -204,6 +211,7 @@ impl BuddyHeader {
                             }
                         }
                         status = BuddyStatus::LEFT; // Trying to change side.
+                        tries += 1;
                     }, 
                     BuddyStatus::FREE => {
                         return Ok(next_buddy);
@@ -324,9 +332,8 @@ unsafe impl Allocator for BuddyAlloc {
                                 continue 'inner
                             }
 
-                            // This is of course impossible, since the logic behind split() method
-                            // will never allow that.
-                            unreachable!("Splitted buddy appears to have no children buddies.");
+                            // The node is splitted, but the allocation is too big for both sides.
+                            return Err(AllocError) 
                         },
                         BuddyStatus::BLOCKED => {
                             // At this point the whole heap is full or fragmented.

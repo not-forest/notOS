@@ -22,7 +22,7 @@ static HEADER_START_FUNC: unsafe extern "C" fn() = header_start;
 #[used(linker)]
 static HEADER_END_FUNC: unsafe extern "C" fn() = header_end;
 
-/// This is the main binary (kernel) space. As the library will build in, more new features will be added further.
+/// This is the main binary (kernel) space. As the library will build in, ew features will be added further.
 use notOS::{
     println, warn, single,
     kernel_components::{
@@ -143,11 +143,14 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
         let stack1 = MEMORY_MANAGEMENT_UNIT.allocate_stack(1).unwrap();
 
         use notOS::Color;
-        use notOS::kernel_components::arch_x86_64::acpi::RSDT;
+        use notOS::kernel_components::arch_x86_64::acpi;
 
-        let rsdt = RSDT::new();
-
-        println!(Color::GREEN; "{:#?}", rsdt);
+        // Obtainin the RSDT.
+        let rsdt = acpi::RSDT::new();
+        // Trying to find FADT.
+        //let fadt = rsdt.find::<acpi::FADT>();
+        
+        //println!("{:#?}", fadt);
 
         /* let p1 = Process::new_void(stack1, 0, 1, 1, None,
             |_t| {
