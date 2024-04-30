@@ -241,8 +241,8 @@ macro_rules! println {
 #[macro_export]
 macro_rules! warn {
     () => ($crate::println!('\n'));
-    ($fmt:expr) => ($crate::println!($crate::Color::YELLOW; concat!("WANRING! " ,$fmt, '\n')));
-    ($fmt:expr, $($arg:tt)*) => ($crate::println!($crate::Color::YELLOW; concat!("WANRING! ", $fmt, '\n'), $($arg)*));
+    ($fmt:expr) => ($crate::println!($crate::Color::YELLOW; concat!("WARNING! " ,$fmt, '\n')));
+    ($fmt:expr, $($arg:tt)*) => ($crate::println!($crate::Color::YELLOW; concat!("WARNING! ", $fmt, '\n'), $($arg)*));
 }
 
 /// A fast macro to show the debug information about the item (in pretty print).
