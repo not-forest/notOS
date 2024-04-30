@@ -1,9 +1,12 @@
 // Memory module for memory management. This is the entry point of memory functions and structs. 
 
+use core::alloc::Allocator;
 use core::mem::{self, size_of, MaybeUninit};
 use core::fmt::{Debug, Display};
 use core::error::Error;
 use core::sync::atomic::{AtomicBool, Ordering};
+
+use crate::kernel_components::arch_x86_64::acpi::rsdt::SDTPointer;
 use crate::kernel_components::arch_x86_64::{
     segmentation::TSS,
     acpi::rsdt::{ACPITagOld, ACPITagNew},
@@ -13,8 +16,8 @@ use crate::kernel_components::memory::frames::PAGE_SIZE;
 use crate::{VirtualAddress, PhysicalAddress, println};
 use crate::single;
 
-
 use super::frames::FrameIter;
+use super::owned_tables::InnerMapper;
 use super::EntryFlags;
 use super::{
     Page, ActivePageTable,
@@ -103,8 +106,9 @@ impl MMU {
             ) 
         }.unwrap();
 
+        use crate::kernel_components::arch_x86_64::acpi::{XSDT, RSDT};
         use crate::kernel_components::memory::{
-            self, 
+            self,
             allocators::GLOBAL_ALLOCATOR,
             EntryFlags,
         };
@@ -147,7 +151,6 @@ impl MMU {
             #[cfg(debug_assertions)]
             println!(crate::Color::LIGHTGRAY; "Mapping page at address {:#x}", page.start_address());
         }   
-
         #[cfg(debug_assertions)] { println!("Mapping complete."); }
 
         let stack_allocator = StackAlloc::new(heap_end_page + 1);
@@ -251,6 +254,70 @@ impl MMU {
         item as *const T as usize
     }
 
+    /// Maps all ACPI tables during the initialization.
+    ///
+    /// Obtains the RSDT and parses all pointed tables to properly map all them based on their
+    /// purpose and function. This function must be called only after full memory initialization.
+    /// Otherwise a page fault will occur due to the access to different ACPI SDTs.
+    #[inline]
+    fn map_acpi_rsdt<A>(rsdt: RSDT, mapper: &mut InnerMapper, allocator: &mut A) where
+        A: FrameAlloc
+    {
+        use crate::Color;
+        use EntryFlags::*;
+
+        for (mut h1, h2) in rsdt.pointers().iter().map(|(ptr)| unsafe {  
+            let h1 = (ptr.v1[0] as *mut u32).cast::<ACPISDTHeader>(); 
+            let h2 = (ptr.v1[1] as *mut u32).cast::<ACPISDTHeader>(); 
+            (h1, h2)
+        }) {
+            // Performing twice due to non aligned 32-bit pointers.
+            for _ in 0..2 {
+                unsafe {
+                    if !h1.is_null() {
+                        println!("Mapping ACPI table: {:?}", h1.read_unaligned().signature);
+                        let start = h1 as usize;
+                        let start_frame = Frame::info_address(start);
+                        let end_frame = Frame::info_address(start + h1.read_unaligned().length as usize);
+
+                        for frame in Frame::range_inclusive(start_frame, end_frame) {
+                            mapper.indentity_map(frame, WRITABLE, allocator);
+                        }
+                    }
+                }
+                h1 = h2;
+            }
+        }
+    }
+
+    /// Maps all ACPI tables during the initialization.
+    ///
+    /// Obtains the XSDT and parses all pointed tables to properly map all them based on their
+    /// purpose and function. This function must be called only after full memory initialization.
+    /// Otherwise a page fault will occur due to the access to different ACPI SDTs.
+    #[inline]
+    fn map_acpi_xsdt<A>(xsdt: XSDT, mapper: &mut InnerMapper, allocator: &mut A) where
+        A: FrameAlloc
+    {
+        use crate::Color;
+        use EntryFlags::*;
+
+        for header in xsdt.pointers().iter().map(|(ptr)| unsafe {(ptr.v2 as *mut usize).cast::<ACPISDTHeader>()}) {
+            unsafe {
+                if !header.is_null() {
+                    println!("Mapping ACPI table: {:?}", header.read_unaligned().signature);
+                    let start = header as usize;
+                    let start_frame = Frame::info_address(start);
+                    let end_frame = Frame::info_address(start + header.read_unaligned().length as usize);
+
+                    for frame in Frame::range_inclusive(start_frame, end_frame) {
+                        mapper.indentity_map(frame, WRITABLE, allocator);
+                    }
+                }
+            }
+        }
+    }
+
     /// Remaps sections of kernel.
     #[inline]
     fn remap_kernel<A>(allocator: &mut A, boot_info: &InfoPointer) -> ActivePageTable
@@ -337,24 +404,32 @@ impl MMU {
             // individually.
             if let Some(x) = boot_info.get_tag::<ACPITagNew>() {
                     // Have to firstly map the table before actually using it.
+                    let xsdt = unsafe { XSDT::from_xsdp(x.xsdp.clone()) };
                     let xsdt_start = Frame::info_address(x.xsdp.ptr as usize);
-                    let header = unsafe { (x.xsdp.ptr as *mut ACPISDTHeader).as_mut() }.unwrap();
-                    let xsdt_end = Frame::info_address(xsdt_start.num + header.length as usize);
+                    let xsdt_end = Frame::info_address(xsdt_start.num + xsdt.header.length as usize);
 
+                    // Mapping the RSDT itself
                     for frame in Frame::range_inclusive(xsdt_start, xsdt_end) {
                         mapper.indentity_map(frame, PRESENT, allocator);
                     }
+
+                    // Mapping each ACPI table.
+                    MMU::map_acpi_xsdt(xsdt, mapper, allocator);
             } else {
                 crate::warn!("XSDT is not present, mapping the legacy RSDT instead.");
                 if let Some(r) = boot_info.get_tag::<ACPITagOld>() {
                     // Have to firstly map the table before actually using it.
+                    let rsdt = unsafe { RSDT::from_rsdp(r.rsdp.clone()) };
                     let rsdt_start = Frame::info_address(r.rsdp.ptr as usize);
-                    let header = unsafe { (r.rsdp.ptr as *mut ACPISDTHeader).as_mut() }.unwrap();
-                    let rsdt_end = Frame::info_address(rsdt_start.num + header.length as usize);
+                    let rsdt_end = Frame::info_address((r.rsdp.ptr + rsdt.header.length) as usize);
 
+                    // Mapping the RSDT itself
                     for frame in Frame::range_inclusive(rsdt_start, rsdt_end) {
                         mapper.indentity_map(frame, PRESENT, allocator);
                     }
+
+                    // Mapping each ACPI table.
+                    MMU::map_acpi_rsdt(rsdt, mapper, allocator);
                 } else {
                     panic!("RSDT is not present. Unable to identity map.");
                 }
