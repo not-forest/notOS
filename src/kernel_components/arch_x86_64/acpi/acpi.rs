@@ -4,7 +4,7 @@
 /// to handle, like the amount of running threads for example. ACPI contains of
 /// different tables like RSDP, BGRT, FADT etc.
 
-use alloc::borrow::ToOwned;
+use alloc::{borrow::ToOwned, fmt};
 use core::mem;
 use crate::{
     bitflags, 
@@ -33,7 +33,7 @@ pub trait SystemDescriptionTable {
         use SDTValidationError::*;
 
         // Signature check.
-        if header.signature != *Self::SIGNATURE {
+        if header.signature != *Self::SIGNATURE.as_bytes() {
             return Err(SIGNATURE)
         }
         // Checksum check.
@@ -49,7 +49,7 @@ pub trait SystemDescriptionTable {
         let slice: &[u8] = unsafe {
             core::slice::from_raw_parts(
                 header as *const _ as *const u8,
-                mem::size_of::<ACPISDTHeader>(),
+                header.length as usize,
             )
         };
 
@@ -71,11 +71,11 @@ pub struct ACPI;
 /// First part of every table structures related to ACPI. All ACPI SDTs may be splitted
 /// in two parts. This is the first part which is the same for all of them, with different
 /// minor changes.
-#[repr(C)]
+#[repr(C, align(0x4))]
 #[derive(Debug, Clone, Copy)]
 pub struct ACPISDTHeader {
-    /// 4 byte or 8 byte signature field, which defines which table is being used.
-    pub signature: Signature,
+    /// 4 byte signature field, which defines which table is being used.
+    pub signature: [UChar; 4],
     /// The size of the entire table.
     pub length: u32,
     /// The revision of the ACPI.
@@ -96,7 +96,7 @@ pub struct ACPISDTHeader {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct GenericAddressStructure {
     /// The address space where the data structure or register exists.
-    addr_space: AddressSpaceID,
+    addr_space: u8,
     /// The size in bits of the given register. When addressing a data structure,
     /// this field must stay zero.
     bit_width: u8,
@@ -104,30 +104,9 @@ pub(crate) struct GenericAddressStructure {
     /// a data structure, this field must stay zero.
     bit_offset: u8,
     /// Specifies access size. 
-    access_size: AccessSize,
+    access_size: u8,
     /// 64-bit address of the data structure or register in the fiven address space.
     addr: usize,
-}
-
-/// All ACPI tables have a 4 byte Signature field, except the RSDP which has
-/// an 8 byte one. This signature is used when the OS must determine which table
-/// it is useing at this moment.
-#[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Signature {
-    /// Most ACPI tables use this.
-    Default([UChar; 4]),
-    /// Special only for RSDT table.
-    RSDT([UChar; 8]),
-} 
-
-impl PartialEq<str> for Signature {
-    fn eq(&self, other: &str) -> bool {
-        match self {
-            Self::Default(b) => b == other.as_bytes(),
-            Self::RSDT(b) => b == other.as_bytes(),
-        }
-    }
 }
 
 /// Custom defined errors, which may occur when validating tables.
