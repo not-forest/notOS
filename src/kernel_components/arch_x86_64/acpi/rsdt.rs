@@ -3,12 +3,28 @@
 
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
-use super::acpi::{ACPISDTHeader, SDTValidationError, Signature, SystemDescriptionTable};
-use super::rsdp::{RSDP, XSDP};
+use super::acpi::{ACPISDTHeader, SDTValidationError, SystemDescriptionTable};
+use super::rsdp::{RootPointerError, RSDP, XSDP};
 use crate::critical_section;
 
+use core::fmt::Debug;
 use core::{mem, ptr};
 pub use super::rsdp::{ACPITagNew, ACPITagOld};
+
+/// Custom union type for RSDT pointers.
+#[derive(Clone, Copy)]
+pub union SDTPointer {
+    /// ACPI v2.0 64-bit pointer.
+    pub v2: usize,
+    /// Two ACPI v1.0 32-bit pointers layed down in memory sequentialy.
+    pub v1: [u32; 2],
+}
+
+impl Debug for SDTPointer {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{:#?}", unsafe { self.v2 })
+    }
+}
 
 /// Root/Extended Root System Description Table.
 ///
@@ -19,9 +35,9 @@ pub use super::rsdp::{ACPITagNew, ACPITagOld};
 #[derive(Debug, Clone)]
 pub struct RSDT {
     /// RSDT has 8-byte signature header.
-    header: ACPISDTHeader,
+    pub header: ACPISDTHeader,
     /// Pointers for ACPI version 1.0
-    ptrs: &'static [*mut u32],
+    ptrs: &'static [SDTPointer],
 }
 
 impl SystemDescriptionTable for RSDT {
@@ -39,6 +55,20 @@ impl RSDT {
         }).expect("Unable to read from RSDP.");
 
         RSDT::_ptrs_map(rsdp)
+    }
+
+    /// Trying to obtain RSDT from the RSDP pointer given by multiboot2.
+    ///
+    /// Works as an alternative to regular new method that allows for error handling
+    /// when RSDP pointer is not available. This is unlikely to happen.
+    pub fn try_new() -> Result<Self, RootPointerError> {
+        // Critical section, because reading from the MMU.
+        match critical_section!(|| {
+            RSDP::new()
+        }) {
+            Ok(rsdp) => Ok(RSDT::_ptrs_map(rsdp)),
+            Err(err) => Err(err),
+        }
     }
 
     /// Works the same as new, but can be used to fast things up when you already do aquire
@@ -59,27 +89,40 @@ impl RSDT {
     pub fn find<T>(&self) -> Result<Option<&mut T>, SDTValidationError> where 
         T: SystemDescriptionTable
     {
-        for ptr in self.ptrs.iter().map(|ptr| ptr.cast::<ACPISDTHeader>()) {
-            if let Some(header) = unsafe { ptr.as_ref() } {
-                // If signature matches the header signature, checking the obtained SDT and
-                // returning it if validated.
-                if header.signature == *T::SIGNATURE {
-                    // No it is necessary to validate the header fully.
-                    match T::validate(header) {
-                        Ok(_) => {
-                            let sdt = unsafe {
-                                // Here we are free to cast the header pointer as the SDT.
-                                ptr.cast::<T>().as_mut().unwrap()
-                            };
-                            return Ok(Some(sdt));
-                        },
-                        Err(e) => return Err(e),
+        for (mut p1, p2) in self.ptrs.iter().map(|(ptr)| unsafe { 
+            let p1 = (ptr.v1[0] as *mut u32).cast::<ACPISDTHeader>(); 
+            let p2 = (ptr.v1[1] as *mut u32).cast::<ACPISDTHeader>(); 
+            (p1, p2)
+        }) {
+            // Having to repeat this process twice, because legacy pointers are not aligned.
+            for _ in 0..2 {
+                if let Some(header) = unsafe { p1.as_ref() } {
+                    // If signature matches the header signature, checking the obtained SDT and
+                    // returning it if validated.
+                    if header.signature == *T::SIGNATURE.as_bytes() {
+                        // Now it is necessary to validate the header fully.
+                        match T::validate(header) {
+                            Ok(_) => {
+                                let sdt = unsafe {
+                                    // Here we are free to cast the header pointer as the SDT.
+                                    p1.cast::<T>().as_mut().unwrap()
+                                };
+                                return Ok(Some(sdt));
+                            },
+                            Err(e) => return Err(e),
+                        }
                     }
                 }
+                p1 = p2;
             }
         }
 
         Ok(None)
+    }
+
+    /// Just a getter function to obtain RSDT pointers as a reference to a slice.
+    pub fn pointers(&self) -> &'static [SDTPointer] {
+        self.ptrs
     }
 
     /// Gets the amount of vectors this table has.
@@ -97,7 +140,7 @@ impl RSDT {
             RSDT {
                 header, 
                 ptrs: ptr::slice_from_raw_parts(
-                    ptrptr as *const *mut u32, amount
+                    ptrptr as *const SDTPointer, amount
                 ).as_ref().unwrap()
             }
         } 
@@ -114,9 +157,9 @@ impl RSDT {
 #[repr(C)]
 pub struct XSDT {
     /// XSDT has 8-byte signature header.
-    header: ACPISDTHeader,
+    pub header: ACPISDTHeader,
     /// Pointers for ACPI version 2.0
-    ptrs: &'static [*mut usize],
+    ptrs: &'static [SDTPointer],
 }
 
 impl SystemDescriptionTable for XSDT {
@@ -136,9 +179,24 @@ impl XSDT {
         XSDT::_ptrs_map(xsdp)
     }
 
+    /// Trying to obtain XSDT from the XSDP pointer given by multiboot2.
+    ///
+    /// Works as an alternative to regular new method that allows for error handling
+    /// when XSDP pointer is not available. This may only happen, when ACPI v1.0 is used
+    /// or some other inner error occur.
+    pub fn try_new() -> Result<Self, RootPointerError> {
+        // Critical section, because reading from the MMU.
+        match critical_section!(|| {
+            XSDP::new()
+        }) {
+            Ok(xsdp) => Ok(XSDT::_ptrs_map(xsdp)),
+            Err(err) => Err(err),
+        }
+    }
+
     /// Works the same as new, but can be used to fast things up when you already do aquire
     /// a proper RSDP.
-    pub(crate) unsafe fn from_rsdp(xsdp: XSDP) -> Self {
+    pub(crate) unsafe fn from_xsdp(xsdp: XSDP) -> Self {
         XSDT::_ptrs_map(xsdp)
     }
 
@@ -154,11 +212,11 @@ impl XSDT {
     pub fn find<T>(&self) -> Result<Option<&mut T>, SDTValidationError> where 
         T: SystemDescriptionTable
     {
-        for ptr in self.ptrs.iter().map(|ptr| ptr.cast::<ACPISDTHeader>()) {
+        for ptr in self.ptrs.iter().map(|ptr| unsafe { (ptr.v2 as *mut usize).cast::<ACPISDTHeader>() }) {
             if let Some(header) = unsafe { ptr.as_ref() } {
                 // If signature matches the header signature, checking the obtained SDT and
                 // returning it if validated.
-                if header.signature == *T::SIGNATURE {
+                if header.signature == *T::SIGNATURE.as_bytes() {
                     // No it is necessary to validate the header fully.
                     match T::validate(header) {
                         Ok(_) => {
@@ -177,9 +235,14 @@ impl XSDT {
         Ok(None)
     }
 
+    /// Just a getter function to obtain RSDT pointers as a reference to a slice.
+    pub fn pointers(&self) -> &'static [SDTPointer] {
+        self.ptrs
+    }
+
     /// Gets the amount of vectors this table has.
     pub fn ptrs_amount(&self) -> usize {
-        _ptrs_amount(self.header)
+        _ptrs_amount(self.header) / 2
     }
 
     fn _ptrs_map(xsdp: XSDP) -> Self {
@@ -192,7 +255,7 @@ impl XSDT {
             XSDT {
                 header,
                 ptrs: ptr::slice_from_raw_parts(
-                    ptrptr as *const *mut usize, amount
+                    ptrptr as *const SDTPointer, amount
                 ).as_ref().unwrap()
             }
         } 
