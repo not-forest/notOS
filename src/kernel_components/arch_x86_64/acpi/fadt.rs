@@ -113,7 +113,7 @@ pub struct FADT {
     boot_arch_flags: u16, // Reserved in ACPI 1.0
     _reserved2: u8, // Must be 0
     /// Mixed feature flags.
-    flags: FACPFLAG,
+    flags: u32,
     /// The addres of the reset register. 
     reset_reg: GenericAddressStructure,
 
@@ -160,7 +160,7 @@ pub enum PPMP {
 }
 
 impl SystemDescriptionTable for FADT {
-    const SIGNATURE: &'static str = "FADT";
+    const SIGNATURE: &'static str = "FACP";
 }
 
 bitflags! {
