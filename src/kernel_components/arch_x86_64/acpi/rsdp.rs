@@ -1,6 +1,6 @@
 //! Module that defines root system description pointers as both structure and tag.
 
-use super::acpi::{ACPISDTHeader, Signature, SystemDescriptionTable};
+use super::acpi::{ACPISDTHeader, SystemDescriptionTable};
 use crate::kernel_components::memory::memory_module::MEMORY_MANAGEMENT_UNIT;
 use crate::kernel_components::memory::tags::{Tag, TagTrait, TagType, TagTypeId};
 use crate::kernel_components::os::UChar;
