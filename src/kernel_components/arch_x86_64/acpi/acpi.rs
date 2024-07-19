@@ -64,7 +64,46 @@ pub trait SystemDescriptionTable {
 /// using special dedicated functions. ACPI consists of two main parts:
 /// - Tables used by the OS for configuration during the boot;
 /// - Run time ACPI environment to interract with system management code;
-pub struct ACPI;
+pub mod acpi_service {
+    use crate::kernel_components::arch_x86_64::{
+        ports::{GenericPort, PortAccessType},
+        acpi::FADT,
+    };
+
+    #[feature(virt_qemu)] const QEMU_PORT_OLD: u16 = 0xb004;
+    #[feature(virt_qemu)] const QEMU_PORT_NEW: u16 = 0x604;
+
+    /// Shutdowns the machine in a proper way.
+    ///
+    /// # Warn
+    ///
+    /// This function have no effect on any running processes, therefore a higher order
+    /// process must be used to call a cleanup procedure from the PMU and then calling this
+    /// function.
+    ///
+    /// # Virtualization
+    ///
+    /// This function won't call a regular shutdown procedure, when the OS is virtualized via
+    /// some virtual machine like QEMU.
+    pub fn shutdown(fadt: Option<&FADT>) {
+        // This part will only be compiled for qemu.
+        #[feature(virt_qemu)] {
+            GenericPort::new(QEMU_PORT_OLD, PortAccessType::WRITEONLY)
+                .write(0x2000 as u16); // Old QEMU. 
+            GenericPort::new(QEMU_PORT_NEW, PortAccessType::WRITEONLY)
+                .write(0x2000 as u16); // Newer QEMU. 
+        }
+
+        // This code will be executed on a regular target.
+        #[feature(not(virt_qemu))] {
+            // Extracting the FADT.
+            let fadt = fadt.expect("FADT argument cannot be 'NONE' for non virtualized build.");
+            //let dsdt = fadt.get_dsdt();                     // Obtaining the dsdt.
+
+            unimplemented!()
+        }
+    }
+}
 
 /// ACPI SDT Table header.
 ///
