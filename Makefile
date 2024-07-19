@@ -15,6 +15,7 @@ GDB_PORT := 1234
 ASSEMBLY_SOURCE_FILES := $(wildcard src/arch/$(ARCH)/*.asm)
 ASSEMBLY_OBJECT_FILES := $(patsubst src/arch/$(ARCH)/%.asm, build/arch/$(ARCH)/%.o, $(ASSEMBLY_SOURCE_FILES))
 
+CARGO_FLAGS ?= --features virt_qemu
 
 .PHONY: all clean run release test iso
 
@@ -52,7 +53,7 @@ $(KERNEL): $(ASSEMBLY_OBJECT_FILES)
 
 
 build_kernel:
-	@RUST_TARGET_PATH=$(CURDIR) xargo build
+	@RUST_TARGET_PATH=$(CURDIR) xargo build $(CARGO_FLAGS)
 
 
 # Release section
@@ -73,7 +74,7 @@ $(RELEASE_ISO): $(RELEASE) build_release $(GRUB_CFG)
 	@rm -rf build/isofiles
 
 build_release:
-	@RUST_TARGET_PATH=$(CURDIR) xargo build --release
+	@RUST_TARGET_PATH=$(CURDIR) xargo build --release $(CARGO_FLAGS)
 
 
 #Tests
