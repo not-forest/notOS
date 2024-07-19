@@ -2,8 +2,12 @@
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, Data, DeriveInput};
+use syn::{parse_macro_input, token::Struct, Data, DataStruct, DeriveInput, FieldsNamed};
 
+/// Derives an enum as a Iternum.
+///
+/// Allows to iterate on enum values to decrease the amount of
+/// match arms in code. Works only with regular variants.
 #[proc_macro_derive(Iternum)]
 pub fn iternum(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
@@ -69,8 +73,47 @@ pub fn iternum(input: TokenStream) -> TokenStream {
     }
 }
 
+/// Declares all fields in the structure as public.
+///
+/// This is useful for structures that have a large amount of fields.
+#[proc_macro_attribute]
+pub fn public(_: TokenStream, input: TokenStream) -> TokenStream {
+    // Parse the input as a DeriveInput
+    let ast = parse_macro_input!(input as DeriveInput);
+    let name = &ast.ident;
 
+    // Extract fields from the struct
+    let fields = match ast.data {
+        syn::Data::Struct(ref s) => {
+            if let syn::Fields::Named(ref fields) = s.fields {
+                &fields.named
+            } else {
+                // Only works for structs with named fields
+                panic!("Struct has unnamed fields");
+            }
+        },
+        _ => return quote! {
+            compile_error!("Public macro can only be used with structs");
+        }.into(), // Only works for structs
+    };
 
+    // Generate field declarations with pub keyword
+    let builder_fields = fields.iter().map(|field| {
+        let field_name = &field.ident;
+        let field_type = &field.ty;
+        quote! {
+            pub #field_name: #field_type,
+        }
+    });
 
+    // Generate the modified struct with all fields public
+    let expanded = quote! {
+        pub struct #name {
+            #(#builder_fields)*
+        }
+    };
 
+    // Return the generated code as a TokenStream
+    expanded.into()
+}
 
