@@ -140,31 +140,23 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
         PROGRAMMABLE_INTERRUPT_CONTROLLER.lock().reinit_chained(32).remap();
     
         use notOS::kernel_components::task_virtualization::{Process, PROCESS_MANAGEMENT_UNIT};
-        let stack1 = MEMORY_MANAGEMENT_UNIT.allocate_stack(1).unwrap();
+        let stack1 = MEMORY_MANAGEMENT_UNIT.allocate_stack(10).unwrap();
 
-        use notOS::Color;
-        use notOS::kernel_components::arch_x86_64::acpi;
 
-        // Obtainin the RSDT.
-        let rsdt = acpi::RSDT::new();
-        // Trying to find FADT.
-        let fadt = rsdt.find::<acpi::FADT>();
-        
-        println!("{:#?}", fadt);
-
-        /* let p1 = Process::new_void(stack1, 0, 1, 1, None,
+        let p1 = Process::new_void(stack1, 0, 1, 1, None,
             |_t| {
                 use notOS::Color;
-                use notOS::kernel_components::arch_x86_64::acpi::RSDT;
+                use notOS::kernel_components::arch_x86_64::acpi::{acpi_service, RSDT, FADT};
 
+                println!(Color::BLUE; "Shutting down...");
                 let rsdt = RSDT::new();
-
-                println!(Color::GREEN; "{:#?}", rsdt);
+                let fadt = rsdt.find::<FADT>();
+                acpi_service::shutdown(fadt.unwrap().as_deref());
             },
-        ); */
+        );
 
         // Pushing the process to the queue.
-        //PROCESS_MANAGEMENT_UNIT.queue(p1);
+        PROCESS_MANAGEMENT_UNIT.queue(p1);
     }
 
     loop {
