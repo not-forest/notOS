@@ -14,3 +14,6 @@ proc_macros = { path = "./proc_macros" }
 [profile.release]
 codegen-units = 1
 lto = true
+
+[features]
+virt_qemu = []
