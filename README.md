@@ -44,7 +44,7 @@ To run **notOS**, follow these steps:
   - **drivers**: Drivers.
   - **sync**: Synchronization primitives like for specific tasks.
   - **memory**: Memory management modules.
-  - **task_virtualization**: Modules for task virtualization, including the scheduler.
+  - **task_virtualization**: Modules for task virtualisation, including the scheduler.
 - **build**: Folder that will spawn for output files. 
 - **arch**: asm files and linker script.
 - **tests**: integrated tests.
@@ -52,7 +52,7 @@ To run **notOS**, follow these steps:
 
 ## Knowledge Base
 
-This project draws inspiration and knowledge from theese sources:
+This project draws inspiration and knowledge from these sources:
 - [Writing an OS in Rust (First Edition)](https://os.phil-opp.com/edition-1/) and [Writing an OS in Rust (Second Edition)](https://os.phil-opp.com/) by Philipp Oppermann.
 - [OSDev Wiki](https://wiki.osdev.org/Expanded_Main_Page).
 - [The Art of Multiprocessor Programming](https://www.amazon.com/Art-Multiprocessor-Programming-Maurice-Herlihy/dp/0123705916) by Maurice Herlihy, Nir Shavit, Victor Luchangco, Michael Spear.
