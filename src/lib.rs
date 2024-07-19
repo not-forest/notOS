@@ -1,7 +1,7 @@
 
 #![no_std]
 #![cfg_attr(test, no_main)]
-#![allow(incomplete_features, unused, non_snake_case)]
+#![allow(incomplete_features, unused, non_snake_case, static_mut_refs)]
 #![feature(custom_test_frameworks, used_with_arg, error_in_core, ptr_metadata, non_null_convenience, 
     generic_const_exprs, allocator_api, slice_ptr_get, maybe_uninit_array_assume_init, 
     abi_x86_interrupt, asm_const, type_alias_impl_trait, tuple_trait, unboxed_closures)]
@@ -81,7 +81,14 @@ pub mod kernel_components {
             pub mod rsdt;
             pub mod fadt;
 
-            pub use acpi::{ACPI, XSDT, RSDT, FADT};
+            /* pub mod diff {
+                mod aml_parser;
+                pub mod aml;
+
+                pub use aml::AMLStream;
+            } */
+
+            pub use acpi::{acpi_service, XSDT, RSDT, FADT};
         }
 
         pub mod interrupts {
