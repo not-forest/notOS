@@ -6,8 +6,10 @@
 
 use crate::bitflags;
 use super::acpi::{ACPISDTHeader, SystemDescriptionTable, GenericAddressStructure};
+use proc_macros::public;
 
 #[repr(C)]
+#[public]
 #[derive(Debug)]
 pub struct FADT {
     /// Table header.
