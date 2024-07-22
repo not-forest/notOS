@@ -15,8 +15,6 @@ GDB_PORT := 1234
 ASSEMBLY_SOURCE_FILES := $(wildcard src/arch/$(ARCH)/*.asm)
 ASSEMBLY_OBJECT_FILES := $(patsubst src/arch/$(ARCH)/%.asm, build/arch/$(ARCH)/%.o, $(ASSEMBLY_SOURCE_FILES))
 
-CARGO_FLAGS ?= --features virt_qemu
-
 .PHONY: all clean run release test iso
 
 all: $(KERNEL)
