@@ -4,8 +4,7 @@
 /// to handle, like the amount of running threads for example. ACPI contains of
 /// different tables like RSDP, BGRT, FADT etc.
 
-use alloc::{borrow::ToOwned, fmt};
-use core::mem;
+use alloc::{borrow::ToOwned, fmt, string::String};
 use crate::{
     bitflags, 
     kernel_components::os::UChar
@@ -34,7 +33,7 @@ pub trait SystemDescriptionTable {
 
         // Signature check.
         if header.signature != *Self::SIGNATURE.as_bytes() {
-            return Err(SIGNATURE)
+            return Err(Signature(header.signature))
         }
         // Checksum check.
         if !Self::checksum(header) {
@@ -70,8 +69,8 @@ pub mod acpi_service {
         acpi::FADT,
     };
 
-    #[feature(virt_qemu)] const QEMU_PORT_OLD: u16 = 0xb004;
-    #[feature(virt_qemu)] const QEMU_PORT_NEW: u16 = 0x604;
+    #[cfg(feature = "virt_qemu")] const QEMU_PORT_OLD: u16 = 0xb004;
+    #[cfg(feature = "virt_qemu")] const QEMU_PORT_NEW: u16 = 0x604;
 
     /// Shutdowns the machine in a proper way.
     ///
@@ -87,7 +86,7 @@ pub mod acpi_service {
     /// some virtual machine like QEMU.
     pub fn shutdown(fadt: Option<&FADT>) {
         // This part will only be compiled for qemu.
-        #[feature(virt_qemu)] {
+        #[cfg(feature = "virt_qemu")] {
             GenericPort::new(QEMU_PORT_OLD, PortAccessType::WRITEONLY)
                 .write(0x2000 as u16); // Old QEMU. 
             GenericPort::new(QEMU_PORT_NEW, PortAccessType::WRITEONLY)
@@ -95,12 +94,14 @@ pub mod acpi_service {
         }
 
         // This code will be executed on a regular target.
-        #[feature(not(virt_qemu))] {
+        #[cfg(not(feature = "virt_qemu"))] {
             // Extracting the FADT.
             let fadt = fadt.expect("FADT argument cannot be 'NONE' for non virtualized build.");
-            //let dsdt = fadt.get_dsdt();                     // Obtaining the dsdt.
+            // Obtaining DSDT and interpreting AML code.
+            let dsdt = fadt.dsdt(); 
 
-            unimplemented!()
+            crate::println!("{:#?}", dsdt.unwrap().aml().0.len());
+            unimplemented!() //TODO! implement DSDT parsing and interpreting shutdown code.
         }
     }
 }
@@ -149,13 +150,12 @@ pub(crate) struct GenericAddressStructure {
 }
 
 /// Custom defined errors, which may occur when validating tables.
-#[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SDTValidationError {
     /// 8 bit checksum field is wrong. All bytes of the table summed must be equal to 0
     CHECKSUM,
     /// The signature does not match the trait's signature and therefore wrong.
-    SIGNATURE,
+    Signature([UChar; 4]),
 }
 
 /// Specifies access sizze. Unless otherwise defined by the Address Space ID.
