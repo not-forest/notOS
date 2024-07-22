@@ -5,11 +5,17 @@
 /// required for locating one.
 
 use crate::bitflags;
-use super::acpi::{ACPISDTHeader, SystemDescriptionTable, GenericAddressStructure};
+use super::acpi::{ACPISDTHeader, GenericAddressStructure, SDTValidationError, SystemDescriptionTable};
+use super::diff::DSDT;
 use proc_macros::public;
 
+/// Fixed ACPI Description Table (FADT/FACP)
+///
+/// This table includes various fixed-length entries that describe the fixed ACPI features of the
+/// hardware. The FADT always refers to the DSDT table, which contains information and description
+/// for various vendor specific system features. Table defines ACPI information vital to an
+/// ACPI-compatible OS, such as the base address for power related register blocks.
 #[repr(C)]
-#[public]
 #[derive(Debug)]
 pub struct FADT {
     /// Table header.
@@ -138,6 +144,33 @@ pub struct FADT {
     // Extended addresses of GPE blocks.
     X_GPE0_BLOCK: GenericAddressStructure,
     X_GPE1_BLOCK: GenericAddressStructure,
+}
+
+impl FADT {
+    /// Obtains the DSDT table from the pointer located in FADT.
+    ///
+    /// This functions automatically maps DSDT's page to prevent page fault, validates the DSDT's
+    /// header and returns the table. DSDT is often corrupted, because it is included by vendor,
+    /// therefore validation may fail. 
+    pub fn dsdt(&self) -> Result<&DSDT, SDTValidationError> {
+        use crate::kernel_components::memory::{EntryFlags, MEMORY_MANAGEMENT_UNIT};
+
+        let p = (self.dsdt as *mut u32).cast::<ACPISDTHeader>();
+        // Mapping DSDT's page to prevent unnecessary page fault.
+        unsafe{ MEMORY_MANAGEMENT_UNIT.map_ptr(p, EntryFlags::PRESENT) }; 
+
+        let header = unsafe { p.as_ref().unwrap() };
+        match DSDT::validate(header) {
+            Ok(_) => {
+                let sdt = unsafe {
+                    // Here we are free to cast the header pointer as the SDT.
+                    p.cast::<DSDT>().as_mut().unwrap()
+                };
+                Ok(sdt)
+            },
+            Err(e) => Err(e),
+        }
+    }
 }
 
 /// Preferred Power Management Profile
