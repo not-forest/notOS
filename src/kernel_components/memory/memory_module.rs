@@ -30,6 +30,8 @@ use super::{
     stack_allocator::{Stack, StackAlloc},
 };
 
+type MMUResult = Result<(), MemError>;
+
 /// A Memory Management Unit.
 /// 
 /// This structure provides all necessary functions, related to memory management
@@ -40,9 +42,9 @@ pub struct MMU {
     info_pointer: InfoPointer<'static>,
     /// Active table 
     active_table: Option<ActivePageTable>,
-    /// Area frame allocator instance, which allocates frames.
+    /// Area frame allocator instance, for allocating frames.
     frame_allocator: AreaFrameAllocator,
-    /// Stack allocator instance, which allocates custom stack.
+    /// Stack allocator instance, which allocates custom OS stacks.
     stack_allocator: StackAlloc,
 
     /// Amount of allocated frames.
@@ -185,6 +187,57 @@ impl MMU {
         *self = MMU::new_init(
             multiboot_information_address
         );
+    }
+
+    /// Maps a page to the frame at the same physical address as the page by a provided pointer
+    /// within that page.
+    /// 
+    /// This is useful for directly mapping hardware tables or other critical structures
+    /// that are expected to be at specific physical addresses.
+    pub fn map_ptr<P>(&mut self, ptr: *const P, flags: EntryFlags) -> MMUResult {
+        self.map_to(
+            Page::containing_address(ptr as usize), 
+            Frame::info_address(ptr as usize), 
+            flags
+        )
+    }
+
+    /// Maps the page to some free frame with the provided flags.
+    ///
+    /// This function is a wrapped interface that abstracts the need of providing frame allocator.
+    pub fn map(&mut self, page: Page, flags: EntryFlags) -> MMUResult {
+        self.with_active_table(|at, fa| at.map(page, flags, fa))
+    }
+
+    /// Maps the page to the frame with the provided flags.
+    /// The `PRESENT` flag is added by default.
+    ///
+    /// This function is a wrapped interface that abstracts the need of providing frame allocator.
+    pub fn map_to(&mut self, page: Page, frame: Frame, flags: EntryFlags) -> MMUResult {
+        self.with_active_table(|at, fa| at.map_to(page, frame, flags, fa))
+    }
+
+    /// Unmaps the page that lies within the provided pointer.
+    pub fn unmap_ptr<P>(&mut self, ptr: *const P) -> MMUResult {
+        self.unmap(Page::containing_address(ptr as usize))
+    }
+
+    /// Unmaps the given page and adds all freed frames to the area frame allocator.
+    ///
+    /// This function is a wrapped interface that abstracts the need of providing frame allocator.
+    pub fn unmap(&mut self, page: Page) -> MMUResult { 
+        self.with_active_table(|at, fa| at.unmap(page, fa))
+    }
+
+    fn with_active_table<F>(&mut self, f: F) -> MMUResult 
+        where F: FnOnce(&mut ActivePageTable, &mut AreaFrameAllocator)
+    {
+        if let Some(at) = &mut self.active_table {
+            f(at, &mut self.frame_allocator);
+            Ok(())
+        } else {
+            Err(MemError::NoFrameAlloc)
+        }
     }
 
     /// Initiates and returns a new custom stack, with the current active page table.
@@ -458,6 +511,12 @@ impl MMU {
     pub(crate) fn get_xsdp(&self) -> Option<&ACPITagNew> {
         self.info_pointer.get_tag::<ACPITagNew>()
     }
+}
+
+/// Enum that defines memory related errors.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum MemError {
+    NoFrameAlloc,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
