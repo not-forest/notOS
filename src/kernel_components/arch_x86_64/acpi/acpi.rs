@@ -1,9 +1,11 @@
+
 /// Custom module for communication with ACPI.
 ///
 /// ACPI allows power management and provides different configurations for the OS
 /// to handle, like the amount of running threads for example. ACPI contains of
 /// different tables like RSDP, BGRT, FADT etc.
 
+use core::{error::Error, fmt::Display};
 use alloc::{borrow::ToOwned, fmt, string::String};
 use crate::{
     bitflags, 
@@ -69,8 +71,19 @@ pub mod acpi_service {
         acpi::FADT,
     };
 
+    #[macro_use]
+    macro_rules! acpi_error {
+        () => ($crate::error!());
+        ($fmt:expr) => ($crate::error!(concat!("ACPI ERROR: " ,$fmt)));
+        ($fmt:expr, $($arg:tt)*) => ($crate::error!(concat!("ACPI ERROR: ", $fmt), $($arg)*));
+    }
+
     #[cfg(feature = "virt_qemu")] const QEMU_PORT_OLD: u16 = 0xb004;
     #[cfg(feature = "virt_qemu")] const QEMU_PORT_NEW: u16 = 0x604;
+
+    /// Custom result type for ACPI service. Different functions within the service module may
+    /// return some custom type or ACPIError.
+    type ACPIResult<T> = Result<T, ACPIError>;
 
     /// Shutdowns the machine in a proper way.
     ///
@@ -84,7 +97,7 @@ pub mod acpi_service {
     ///
     /// This function won't call a regular shutdown procedure, when the OS is virtualized via
     /// some virtual machine like QEMU.
-    pub fn shutdown(fadt: Option<&FADT>) {
+    pub fn shutdown(fadt: Option<&FADT>) -> ACPIResult<()> {
         // This part will only be compiled for qemu.
         #[cfg(feature = "virt_qemu")] {
             GenericPort::new(QEMU_PORT_OLD, PortAccessType::WRITEONLY)
@@ -98,11 +111,25 @@ pub mod acpi_service {
             // Extracting the FADT.
             let fadt = fadt.expect("FADT argument cannot be 'NONE' for non virtualized build.");
             // Obtaining DSDT and interpreting AML code.
-            let dsdt = fadt.dsdt(); 
-
-            crate::println!("{:#?}", dsdt.unwrap().aml().0.len());
+            match fadt.dsdt() {
+                Ok(dsdt) => crate::println!("{:#?}", dsdt.aml().0.len()),
+                Err(err) => {
+                    acpi_error!("FATAL ERROR: Unable to obtain DSDT table: {}", err);
+                    return Err(ACPIError::DSDT); 
+                }
+            }
             unimplemented!() //TODO! implement DSDT parsing and interpreting shutdown code.
         }
+    }
+
+    /// Custom error type for ACPI service.
+    ///
+    /// Those error codes contain info about what went wrong when calling some ACPI service within
+    /// this module. Usually most errors related to not being able to obtain one or more ACPI
+    /// tables. This is why error code just defines which table it was unable to obtain and throws
+    /// it back.
+    pub enum ACPIError {
+        RSDT, XSDT, FADT, DSDT, SSDT
     }
 }
 
@@ -156,6 +183,17 @@ pub enum SDTValidationError {
     CHECKSUM,
     /// The signature does not match the trait's signature and therefore wrong.
     Signature([UChar; 4]),
+}
+
+impl Error for SDTValidationError {}
+
+impl Display for SDTValidationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::CHECKSUM => write!(f, "Table's checksum doesn't match."),
+            Self::Signature(s) => write!(f, "Table's signature doesn't match: {:?}", s),
+        }
+    }
 }
 
 /// Specifies access sizze. Unless otherwise defined by the Address Space ID.
