@@ -235,6 +235,16 @@ macro_rules! println {
     ($fr:expr; $bg:expr; $fmt:expr, $($arg:tt)*) => ($crate::print!($fr; $bg; concat!($fmt, '\n'), $($arg)*)); 
 }
 
+/// Writes an error message to the screen in red.
+///
+/// Works like println, but do not accept the color argument. The output will always be in red.
+#[macro_export]
+macro_rules! error {
+    () => ($crate::println!('\n'));
+    ($fmt:expr) => ($crate::println!($crate::Color::RED; concat!("ERROR!! " ,$fmt, '\n')));
+    ($fmt:expr, $($arg:tt)*) => ($crate::println!($crate::Color::RED; concat!("ERROR!! ", $fmt, '\n'), $($arg)*));
+}
+
 /// Writes a warning message to the screen in yellow.
 /// 
 /// Works like println, but do not accept the color argument. The output will always be in yellow.
