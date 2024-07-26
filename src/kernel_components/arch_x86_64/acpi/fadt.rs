@@ -147,24 +147,36 @@ pub struct FADT {
 }
 
 impl FADT {
-    /// Obtains the DSDT table from the pointer located in FADT.
+    /// Obtains the DSDT table from the legacy 32-bit pointer located in FADT.
+    ///
+    /// This functions automatically maps DSDT's page to prevent page fault, validates the DSDT's
+    /// header and returns the table. DSDT is often corrupted, because it is included by vendor,
+    /// therefore validation may fail. 
+    pub fn dsdt_legacy(&self) -> Result<&DSDT, SDTValidationError> {
+        self._dsdt((self.dsdt as *mut u32).cast::<ACPISDTHeader>())
+    }
+
+    /// Obtains the DSDT table from the 64-bit pointer located in FADT.
     ///
     /// This functions automatically maps DSDT's page to prevent page fault, validates the DSDT's
     /// header and returns the table. DSDT is often corrupted, because it is included by vendor,
     /// therefore validation may fail. 
     pub fn dsdt(&self) -> Result<&DSDT, SDTValidationError> {
+        self._dsdt((self.X_DSDT as *mut usize).cast::<ACPISDTHeader>())
+    }
+
+    // Inner function that obtains DSDT after proper memory mapping.
+    fn _dsdt(&self, ptr: *mut ACPISDTHeader) -> Result<&DSDT, SDTValidationError> {
         use crate::kernel_components::memory::{EntryFlags, MEMORY_MANAGEMENT_UNIT};
-
-        let p = (self.dsdt as *mut u32).cast::<ACPISDTHeader>();
         // Mapping DSDT's page to prevent unnecessary page fault.
-        unsafe{ MEMORY_MANAGEMENT_UNIT.map_ptr(p, EntryFlags::PRESENT) }; 
+        unsafe{ MEMORY_MANAGEMENT_UNIT.map_ptr(ptr, EntryFlags::PRESENT) }; 
 
-        let header = unsafe { p.as_ref().unwrap() };
+        let header = unsafe { ptr.as_ref().unwrap() };
         match DSDT::validate(header) {
             Ok(_) => {
                 let sdt = unsafe {
                     // Here we are free to cast the header pointer as the SDT.
-                    p.cast::<DSDT>().as_mut().unwrap()
+                    ptr.cast::<DSDT>().as_mut().unwrap()
                 };
                 Ok(sdt)
             },
