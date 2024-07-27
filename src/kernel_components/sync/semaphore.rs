@@ -1,7 +1,7 @@
 /// A module that implements two semaphore types.
 ///
 /// The most basic synchronization primitives, which are used within different OS implementation
-/// are semaphores. They provide a mutual exclution to some public resource, which has multiple
+/// are semaphores. They provide a mutual exclusion to some public resource, which has multiple
 /// instances, allow to avoid race conditions.
 
 use crate::kernel_components::task_virtualization::Thread;
@@ -15,16 +15,16 @@ use alloc::boxed::Box;
 
 /// A generic Semaphore
 ///
-/// Blocks the resource for one of the thread, if some other has aquired it first. It is different
+/// Blocks the resource for one of the thread, if some other has acquired it first. It is different
 /// from a regular Mutex, as it allows a coordination between multiple threads on one resource. It
-/// does not own the resource, but guarantees mutual exclution for it.
+/// does not own the resource, but guarantees mutual exclusion for it.
 pub struct Semaphore<T: ?Sized> {
     data: Mutex<Box<T>>,
     value: AtomicUsize,
 }
 
 impl<T> Semaphore<T> {
-    /// Creates a new instance of BinarySemaphore
+    /// Creates a new instance of a Semaphore
     ///
     /// Creates it from the provided data and places it on the heap.
     pub fn new(data: T) -> Self {
@@ -34,7 +34,7 @@ impl<T> Semaphore<T> {
         }
     }
 
-    /// Creates a new instance of BinarySemaphore
+    /// Creates a new instance of Semaphore
     ///
     /// Creates a clear instance of a semaphore, with unitialized data. The data must be carefully
     /// initialized manually by user.
@@ -57,7 +57,7 @@ impl<T> Semaphore<T> {
         self.data.lock()
     }
 
-    /// Tries to aquire the resource.
+    /// Tries to acquire the resource.
     ///
     /// If the condition is not met, will return Err with the current counter value. 
     pub fn try_wait(&self) -> Result<SemaphoreGuard<T>, usize> {

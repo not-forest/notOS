@@ -2,11 +2,6 @@
 /// 
 /// This mutex uses the regular simple locking algorithm and do not guarantee fairness for each
 /// individual thread
-/// 
-/// # Note
-/// 
-/// Right now the mutex acts as a spin lock. TODO! make the yield operation possible, after 
-/// threads implementation.
 
 use core::fmt::{Debug, Display};
 use core::error::Error;
