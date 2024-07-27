@@ -42,19 +42,37 @@
 /// Alloc crate for convenient allocations.
 extern crate alloc;
 
-/// Main entry point for outer structures and objects
+/// Main library entry point.
 pub mod kernel_components {
+    /// I/O operation on VGA buffer (Basic TUI)
     pub mod vga_buffer;
+    /// OS specific helper types.
     pub mod os;
 
+    /// Custom data structures and types for operating on OS resources.
+    ///
+    /// This module consists of important structures, which are required for proper OS work.
+    /// Different parts of other code might use those structures for example for critical code
+    /// sections that require thread safe wrappers.
     pub mod structures {
+        /// Defines structures for constant one-time initialization per OS load.
         pub mod single;
+        /// Defines a helper trait that works with outer proc_macro trait. Allows to iterate
+        /// through enums to reduce code's size.
         pub mod iternum;
+        /// Custom trait to represent any value as a reference to a pack of bytes.
         pub mod bytes;
+        /// Custom data structures to represent numerical values as a bitfield for convenient
+        /// operations on bits.
         pub mod bitflags;
 
+        /// Thread safe Data Structures.
         pub mod thread_safe {
+            /// Lock-free concurrent list data structure. Ensures mutual exclution by applying
+            /// atomic flags and pointers to each individual node and manipulating them to perform
+            /// atomic operations on nodes themselves.  
             pub mod concurrent_list;
+            /// Lock-free queue data structure based on Michael & Scott algorithm.
             pub mod concurrent_queue;
 
             pub use concurrent_list::ConcurrentList;
@@ -67,24 +85,47 @@ pub mod kernel_components {
         pub use bitflags::BitNode;
     }
 
+    /// Main module that defines x86 specific structures and interfaces. The majority of those
+    /// modules are compatible with 32-bit version, however meant to be used for 64-bit version.
     pub mod arch_x86_64 {
+        /// Protection rings implementation in form of enum.
         pub mod privilege_rings;
+        /// Defines interface to read and write descriptor tables.
         pub mod descriptor_table;
+        /// Defines structures to obtain hardware generated random values.
         pub mod random;
+        /// Defines a port for POST debug boards. (Micro-delay abuse)  
         pub mod post;
+        /// Defines trait that represents CPU ports of different sizes.
         pub mod ports;
+        /// Manipulations with the Transition Lookaside Buffer.
         pub mod TLB;
 
+        /// This module defines all ACPI related structures and procedures.
+        ///
+        /// It contains the most used ACPI tables to manipulate with power settings and perform
+        /// ACPI-related tasks. Those tables can be exposed and used manually by the OS, or via
+        /// acpi_service modules, that defines several wrapper functions.
         pub mod acpi {
-            pub mod rsdp;
+            /// Main ACPI module that defines common structures used in all ACPI tables and a
+            /// service for convenient interface with OS.
             pub mod acpi;
+            /// Defines RSDP/XSDP pointer table. The main entry of ACPI journey.
+            pub mod rsdp;
+            /// Defines RSDT/XSDT tables. Those tables contain a list of pointers to ACPI fixed
+            /// tables.
             pub mod rsdt;
+            /// Main ACPI tables that defines hardware features and allows to manipulate with it
+            /// via it's mapped registers. 
             pub mod fadt;
 
+            /// This module defines differentiated ACPI tables and AML language interpreter.
             pub mod diff {
-                pub mod dsdt;
-                //mod aml_parser;
+                /// Defines common AML data types and constants.
                 pub mod aml;
+
+                /// Defines a DSDT table that allows to build ACPI Namespace.
+                pub mod dsdt;
 
                 pub use aml::AMLStream;
                 pub use dsdt::DSDT;
@@ -93,9 +134,19 @@ pub mod kernel_components {
             pub use acpi::{acpi_service, XSDT, RSDT, FADT};
         }
 
+        /// Iterrupts and exceptions handling.
+        ///
+        /// Defines basic interface to find, modify and load the Interrupt Descriptor Table to
+        /// perform exceptions/interrupt handling. Custom written functions can be used for such
+        /// purposes, however a set of pre-made functions are implemented there also.
         pub mod interrupts {
+            /// This module defines HandlerFn trait that is used for filling IDT with own interrupt 
+            /// handlers. Pre-defined functions are also implemented in it's submodules. 
             pub mod handler_functions;
+            /// Defines common interrupt/exception structures and several wrappers for assembly
+            /// instructions, which are somehow related to interrupts/exceptions. 
             pub mod interrupt;
+            /// Defines an Interrupt Descriptor Table structure and it's methods.
             pub mod interrupt_descriptor_table;
 
             pub use handler_functions::HandlerFn;
@@ -111,19 +162,27 @@ pub mod kernel_components {
             };
         }
 
+        /// Defines interfaces for different CPU inner controllers including those, that might
+        /// cause IRQ interrupts. 
         pub mod controllers {
+            /// PS/2 controller management (Keyboard controller for old keyboards.)
             pub mod ps_2;
+            /// Programmable Interrupt Controller management. (Legacy controller.)
             pub mod pic;
+            /// Advanced Programmable Interrupt Controller management.
             pub mod apic;
-
+            /// Defines command words for PIC controllers for easy management.
             pub mod pic_command_words;
 
             pub use pic::{PIC, PROGRAMMABLE_INTERRUPT_CONTROLLER};
             pub use ps_2::{PS2, PSControllerCommand, PSControllerConfiguration};
         }
 
+        /// Defines a minimal segmentation interface to jump into 64-bit Long Mode.
         pub mod segmentation {
+            /// Global Descriptor Table implementation. Contains OS's segments
             pub mod global_descriptor_table;
+            /// Minimal Task State Segment implementation for Long Mode.
             pub mod task_state_segment;
 
             pub use task_state_segment::TSS;
@@ -135,19 +194,34 @@ pub mod kernel_components {
         pub use random::{RdRand, RdSeed};
     }
 
+    /// x86 architecture-specific registers and their management. 
     pub mod registers {
+        /// Defines all 6 CPU's segment registers and interface to manipulate them.
         pub mod segment_regs;
+        /// Defines all CPU's control registers and methods to load/store their values 
         pub mod control;
+        /// Defines MXSRC register. Associated with floating-point control and status for SIMD
+        /// instructions.
         pub mod mxscr;
+        /// Defines CPU status register XFLAGS. 
         pub mod flags;
+        /// Defines Model Specific registers. 
         pub mod ms;
     }
 
+    /// Custom module for driver interface.
+    ///
+    /// Such interfaces define code that must run in kernel-space. Basically a bridge between
+    /// user-space and kernel-space to create kernel modules for system's peripherals.
     pub mod drivers;
 
+    /// Synchronization Primitives.
     pub mod sync {
+        /// Implementation of basic Mutex. Yields in multithreaded environment.
         pub mod mutex;
+        /// Simple Semaphore implementation with counter.
         pub mod semaphore;
+        /// Thread barrier for OS. Only works for threads within one Process.
         pub mod barrier;
 
         pub use mutex::{Mutex, MutexGuard};
@@ -155,14 +229,27 @@ pub mod kernel_components {
         pub use barrier::Barrier;
     }
 
+    /// Module for all memory related manipulations.
     pub mod memory {
-        
+        /// Different heap memory allocators implementations.
         pub mod allocators {
+            /// Module that defines a Global Allocator constant, that is being used when heap-related 
+            /// tasks are called. Different allocators can be used within the global one. (Using
+            /// leak allocator by default.)
             pub mod global_alloc;
+            /// Most basic heap allocator implementation. Never deallocates data, always leaks memory.
+            /// (Not very useful.)
             pub mod leak_alloc;
+            /// Bump allocator implementation. May deallocate the previous allocation if it is the
+            /// same size as a new one by using 'BumpHoles'. (Not very useful)
             pub mod bump_alloc;
+            /// Fast allocator for small heaps. Uses an array of nodes to allocate values.
+            /// (Arguably useful.)
             pub mod node_alloc;
+            /// Free List allocator implementation with different searching techniques. Stores all
+            /// data in a dynamic list structure within the heap region. (Solid choice)
             pub mod free_list_alloc;
+            /// Buddy Allocator implementation. (Very solid choice ^-^)
             pub mod buddy_alloc;
 
             pub use global_alloc::{GAllocator, SubAllocator, GLOBAL_ALLOCATOR};
@@ -173,17 +260,28 @@ pub mod kernel_components {
             pub use buddy_alloc::{BuddyAlloc, BUDDY_ALLOC};
         }
 
+        /// Simple allocator for stack management in Long Mode environment.
         pub mod stack_allocator;
 
+        /// Main memory related module. Holds the MMU structure, which is a key to memory
+        /// management operations and initialization.
         pub mod memory_module;
+        /// Memory map module for data provided from GRUB in multiboot structure. 
         pub mod memory_map;
+        /// Module that defines interface for parsing information from executable sections. 
         pub mod sections;
+        /// Defines interface to GRUB's tags. 
         pub mod tags;
 
+        /// Physical memory management.
         pub mod frames;
+        /// Paging memory model management.
         pub mod paging;
+        /// Structure with ownership of the P4 table in paging module
         pub mod owned_tables;
+        /// Dummy page tables to map frames to virtual addresses before swap. 
         pub mod temporary_pages;
+        /// Inactive page tables.
         pub mod inactive_tables;
 
         pub use memory_module::{MMU, InfoPointer, BootInfoHeader, MEMORY_MANAGEMENT_UNIT};
@@ -196,14 +294,25 @@ pub mod kernel_components {
         pub use inactive_tables::InactivePageTable;
     }
 
+    /// IPC and multithreading implementation.
     pub mod task_virtualization {
+        /// Scheduler trait to schedule processes and threads in pairs (tasks).
         pub mod scheduler;
+        /// Round Robin scheduler implementation.
         pub mod round_robin;
+        /// Scheduler based on process' priority.
         pub mod priority_based_scheduling;
         
+        /// Implementation of Process. A container of threads that hold their local and shared
+        /// environment. Defines most important functions to run scheduled code. 
         pub mod process;
+        /// Thread implementation. A simple unit that performs defined code and saves local
+        /// environment before task switch.
         pub mod thread;
+        /// Kernel level Join Handle for threads. Allows for synchronization without primitives.
         pub mod join_handle;
+        /// Process Management Unit structure. Main structure that holds information about
+        /// running/queued processes and schedules them.
         pub mod pmu;
 
         pub use pmu::{PMU, PROCESS_MANAGEMENT_UNIT};
