@@ -112,7 +112,7 @@ unsafe impl Allocator for LeakAlloc {
             // Loads the current state of next ptr.
             let current_next_ptr = self.next_ptr.load(Ordering::Relaxed);
             let start_alloc = current_next_ptr & align_mask;
-            let mut end_alloc = start_alloc.saturating_add(layout.size());
+            let end_alloc = start_alloc.saturating_add(layout.size());
 
             if end_alloc <= self.end_ptr_addr() {
                 #[cfg(debug_assertions)] {

@@ -114,7 +114,7 @@ pub fn is_interrupts_enabled() -> bool {
 /// 
 /// This function is suitable for preventing deadlocks and other awful things that could be
 /// caused via interrupts. This basically disables the software interrupts to occur, which is
-/// timer interrupts and i/o's. It prevents the interrupt to cause undefined behavior of something
+/// timer interrupts and i/o s. It prevents the interrupt to cause undefined behavior of something
 /// that should not be interrupted.
 /// 
 /// # Unsafe

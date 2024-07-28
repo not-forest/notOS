@@ -125,7 +125,7 @@ impl MMU {
         // Getting multiboot2 boundaries.
         let multiboot_start = boot_info.mstart();
         let multiboot_end = boot_info.mend();
-        // Getting heap boundaties.
+        // Getting heap boundaries.
         let heap_start = unsafe { GLOBAL_ALLOCATOR.heap_addr };
         let heap_end = heap_start + unsafe{ GLOBAL_ALLOCATOR.arena_size };
 

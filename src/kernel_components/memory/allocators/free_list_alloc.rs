@@ -15,8 +15,7 @@
 /// ## Scale
 /// 
 /// The size of heap arena is the same as the given at compile time. No growing methods
-/// exists to make it bigger or shrink it. The allocator uses it's own small heap to store
-/// the free list data.
+/// exists to make it bigger or shrink it.
 /// 
 /// ## Search
 /// 
