@@ -297,7 +297,6 @@ unsafe impl Allocator for BuddyAlloc {
         'main: loop {
             if let Some(mut node) = unsafe { (self.head.load(Ordering::Acquire) as *mut BuddyHeader).as_mut() } {
                 'inner: loop {
-                    size /= 2;
                     match node.status {
                         BuddyStatus::FREE => {
                             // If no further division is possible, allocating the buddy.
@@ -325,6 +324,7 @@ unsafe impl Allocator for BuddyAlloc {
                             // Calling the inner function of the node, which will be recursive.
                             if let Ok(n) = node.search(s, self.arena_size(), layout.size(), size) {
                                 node = n;
+                                size /= 2;            
                                 continue 'inner
                             }
 
@@ -385,7 +385,7 @@ unsafe impl Allocator for BuddyAlloc {
 
         if let Some(mut node) = unsafe { (self.head.load(Ordering::Acquire) as *mut BuddyHeader).as_mut() } {
             // Merging the node.
-            node.merge(BuddyStatus::BLOCKED, node_ptr as usize, self.arena_size());
+            node.merge(BuddyStatus::BLOCKED, node_ptr as usize, layout.size());
         }
     }
 }
