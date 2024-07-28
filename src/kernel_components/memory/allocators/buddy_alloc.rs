@@ -122,7 +122,7 @@ impl BuddyHeader {
                 }
 
                 // Searching the required node.
-                if merge_ptr < (side + BUDDY_HEADER_SIZE + size / 2 + 10) {
+                if merge_ptr < (side + BUDDY_HEADER_SIZE + size / 2) {
                     if let Ok((parent_node, left)) = next_buddy.merge(BuddyStatus::LEFT, merge_ptr, size / 2) {
                         // Checking the right node.
                         if let Some(right) = unsafe { (parent_node.right.load(Ordering::Acquire) as *mut BuddyHeader).as_mut() } {
@@ -165,7 +165,7 @@ impl BuddyHeader {
     }
 
     #[inline(never)]
-    fn search(&mut self, mut status: BuddyStatus, arena_size: usize, alloc_size: usize, size: usize) -> Result<&mut BuddyHeader, ()> {
+    fn search(&mut self, mut status: BuddyStatus, arena_size: usize, alloc_size: usize, size: &mut usize) -> Result<&mut BuddyHeader, ()> {
         // If the node is divided, checking the left side first and then the right
         // one. Other splitted nodes are in high priority, as they do not require
         // further splitting for buddies.
@@ -186,9 +186,10 @@ impl BuddyHeader {
             if let Some(next_buddy) = unsafe { (side as *mut BuddyHeader).as_mut() } {
                 match next_buddy.status {
                     l @ BuddyStatus::LEFT => {
-                        if (size / 2).saturating_sub(BUDDY_HEADER_SIZE) >= alloc_size { 
+                        if (*size / 2).saturating_sub(BUDDY_HEADER_SIZE) >= alloc_size { 
+                            *size = (*size / 2).saturating_sub(BUDDY_HEADER_SIZE);
                             // Going to all different leaves until finding siutable place.
-                            if let Ok(n) = next_buddy.search(l, arena_size, alloc_size, size/2) {
+                            if let Ok(n) = next_buddy.search(l, arena_size, alloc_size, size) {
                                 self.status = BuddyStatus::RIGHT;
                                 return Ok(n)
                             }
@@ -197,9 +198,10 @@ impl BuddyHeader {
                         tries += 1;
                     },
                     r @ BuddyStatus::RIGHT => {
-                        if (size / 2).saturating_sub(BUDDY_HEADER_SIZE) >= alloc_size { 
+                        if (*size / 2).saturating_sub(BUDDY_HEADER_SIZE) >= alloc_size { 
+                            *size = (*size / 2).saturating_sub(BUDDY_HEADER_SIZE);
                             // Going to all different leaves until finding siutable place.
-                            if let Ok(n) = next_buddy.search(r, arena_size, alloc_size, size/2) {
+                            if let Ok(n) = next_buddy.search(r, arena_size, alloc_size, size) {
                                 self.status = BuddyStatus::LEFT; 
                                 return Ok(n)
                             }
@@ -208,11 +210,12 @@ impl BuddyHeader {
                         tries += 1;
                     }, 
                     BuddyStatus::FREE => {
+                        *size = (*size / 2).saturating_sub(BUDDY_HEADER_SIZE);
                         return Ok(next_buddy);
                     }, // We cannot go wrong with a free one.
                     BuddyStatus::BLOCKED => {
                         if status != BuddyStatus::RIGHT {
-                            return self.search(BuddyStatus::RIGHT, arena_size, alloc_size, size/2)
+                            return self.search(BuddyStatus::RIGHT, arena_size, alloc_size, size)
                         } else {
                             break 'main
                         }
@@ -289,7 +292,7 @@ unsafe impl Allocator for BuddyAlloc {
         // Calculate a mask to enforce the required alignment.
         let align_mask = !(layout.align() - 1);
 
-        let mut size = self.arena_size();
+        let mut size = self.arena_size() - BUDDY_HEADER_SIZE;
         // Trying to obtain the head.
         //
         // This can only fail at the very first allocation, where there is still no
@@ -322,9 +325,8 @@ unsafe impl Allocator for BuddyAlloc {
                         },
                         s @ (BuddyStatus::LEFT | BuddyStatus::RIGHT) => {
                             // Calling the inner function of the node, which will be recursive.
-                            if let Ok(n) = node.search(s, self.arena_size(), layout.size(), size) {
+                            if let Ok(n) = node.search(s, self.arena_size(), layout.size(), &mut size) {
                                 node = n;
-                                size /= 2;            
                                 continue 'inner
                             }
 
@@ -369,8 +371,6 @@ unsafe impl Allocator for BuddyAlloc {
     ///
     /// While searches for the requested memory from the top, merges all buddies, which
     /// are freed, including the one which is about to be freed by this function call.
-    ///
-    /// TODO!
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
         #[cfg(debug_assertions)] {
             crate::println!("Deallocating {} bytes from {:#x}", layout.size(), ptr.as_ptr() as usize);
