@@ -206,12 +206,8 @@ impl AMLParser {
             BREAK_OP                => crate::print!("BREAK_OP "),
             BREAKPOINT_OP           => crate::print!("BREAKPOINT_OP "),
             ONES_OP                 => crate::print!("ONES_OP "),
-            b @ _                   => crate::print!("{:x} ", b),
+            b @ _                   => crate::print!("0x{:x} ", b),
         };
-        *ptr += 1;
-        if *ptr == 30 {
-            unimplemented!()
-        }
         Ok(())
     }
 }
