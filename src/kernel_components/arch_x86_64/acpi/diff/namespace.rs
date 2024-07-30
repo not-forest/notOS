@@ -36,13 +36,20 @@ impl ACPINamespace {
 
         while let Some(ns) = iter.next() {
             match ns {
+                NamespacePath::NullChar => break, // This one is root, which we have from the very start
                 NamespacePath::RootChar => {
-                    if let Some(NamespacePath::NamePath(nameseg)) = iter.next() {
-                        crate::println!("test: {:#?}", nameseg);
-                        self.root().populate_layer(nameseg, ltype);
-                        self.current_seg = nameseg;
+                    if let Some(next_ns) = iter.next() {
+                        match next_ns {
+                            NamespacePath::NamePath(nameseg) => {
+                                crate::println!("test: {:#?}", nameseg);
+                                self.root().populate_layer(nameseg, ltype);
+                                self.current_seg = nameseg;    
+                            },
+                            NamespacePath::NullChar => break,
+                            _ => return Err(AMLParserError::UnexpectedToken)
+                        }
                     } else {
-                        return Err(AMLParserError::UnexpectedToken) 
+                        return Err(AMLParserError::UnexpectedEndOfStream) 
                     }
                 },
                 NamespacePath::DualPrefixChar => {
@@ -170,7 +177,9 @@ impl NameString {
         let mut separator = false;
 
         while let Some(byte) = iter.next() {
+            crate::println!("[{}]", byte);
             let path = match *byte {
+                0x0                 => {separator = false; NamespacePath::NullChar}, 
                 ROOT_CHAR           => {separator = true; NamespacePath::RootChar},
                 PARENT_PREFIX_CHAR  => {separator = true; NamespacePath::ParentPrefixChar},
                 DUAL_NAME_PREFIX    => {separator = true; NamespacePath::DualPrefixChar},
@@ -197,8 +206,8 @@ impl NameString {
         let mut counter = 0;
         for ns in self.0.iter() {
             match ns {
-                NamespacePath::RootChar | NamespacePath::ParentPrefixChar | NamespacePath::DualPrefixChar => counter += 1,
                 NamespacePath::NamePath(_) => counter += 4,
+                _ => counter += 1,
             }
         }
         counter
@@ -207,6 +216,8 @@ impl NameString {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum NamespacePath { 
+    /// Very specific NULL name. Will be found in the start of DSDT.
+    NullChar,
     /// Absolute path from the root layer.
     RootChar,
     /// Going further to child
