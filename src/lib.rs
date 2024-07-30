@@ -1,4 +1,3 @@
-
 #![no_std]
 #![cfg_attr(test, no_main)]
 #![allow(incomplete_features, unused, non_snake_case, static_mut_refs)]
@@ -121,14 +120,36 @@ pub mod kernel_components {
 
             /// This module defines differentiated ACPI tables and AML language interpreter.
             pub mod diff {
+                /// Module that packs all parser related sub-modules
+                mod parser {
+                    /// Parsing package length encoding.
+                    mod pkg;
+                    /// Main parser structure. Used as an interface to other modules by interpreter
+                    mod aml_parser;
+                    /// Defines AML definitions, like Names, Scopes, Aliases, etc.
+                    mod definitions;
+
+                    pub use aml_parser::{AMLParser, AMLParserError, AMLParserResult};
+                    pub use pkg::PkgLength;
+                    pub use definitions::Scope;
+                }
+
+                /// Defines different AML language data types and objects.
+                mod objects;
+                /// Defines an output tree-like data structure for ACPI management.
+                mod namespace;
+                /// Main interface to communicate between ACPI and OS.
+                mod interpreter;
                 /// Defines common AML data types and constants.
                 pub mod aml;
 
                 /// Defines a DSDT table that allows to build ACPI Namespace.
                 pub mod dsdt;
 
-                pub use aml::AMLStream;
+                pub use aml::{AMLStream, AMLResult};
                 pub use dsdt::DSDT;
+                pub use interpreter::{AMLInterpreter, AMLInterpreterError};
+                pub use parser::{AMLParser, AMLParserError};
             }
 
             pub use acpi::{acpi_service, XSDT, RSDT, FADT};
