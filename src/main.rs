@@ -24,13 +24,11 @@ static HEADER_END_FUNC: unsafe extern "C" fn() = header_end;
 
 /// This is the main binary (kernel) space. As the library will build in, ew features will be added further.
 use notOS::{
-    println, warn, single,
     kernel_components::{
         arch_x86_64::interrupts,
         memory::MEMORY_MANAGEMENT_UNIT, 
         registers::{control, ms},
-    }, 
-        GLOBAL_ALLOCATOR, BUDDY_ALLOC,
+    }, print, println, single, warn, BUDDY_ALLOC, FREE_LIST_ALLOC, GLOBAL_ALLOCATOR
     };
 
 #[no_mangle]
@@ -69,10 +67,10 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
     // The global allocator is a mutable static that do not use any locking 
     // algorithm, so any operation on it, is unsafe.
     unsafe { 
-        GLOBAL_ALLOCATOR.r#use(&BUDDY_ALLOC);
-        //FREE_LIST_ALLOC.change_strategy(
-        //    notOS::kernel_components::memory::allocators::free_list_alloc::SearchStrategy::BEST_FIT
-        //);
+        GLOBAL_ALLOCATOR.r#use(&FREE_LIST_ALLOC);
+        FREE_LIST_ALLOC.change_strategy(
+            notOS::kernel_components::memory::allocators::free_list_alloc::SearchStrategy::BEST_FIT
+        );
    
         // The MMU structure makes it easier to handle memory related commands.
         MEMORY_MANAGEMENT_UNIT.init(_multiboot_information_address);
@@ -144,14 +142,23 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
 
 
         let p1 = Process::new_void(stack1, 0, 1, 1, None,
-            |_t| {
+            |t| {
                 use notOS::Color;
-                use notOS::kernel_components::arch_x86_64::acpi::{acpi_service, RSDT, FADT};
+                use notOS::kernel_components::arch_x86_64::controllers::{RTC, CMOSAddr};
 
-                println!(Color::BLUE; "Shutting down...");
-                let rsdt = RSDT::new();
-                let fadt = rsdt.find::<FADT>();
-                acpi_service::shutdown(fadt.unwrap().as_deref());
+                println!(Color::BLUE; "Reading current's date and time.");
+                let rtc = RTC::new();
+
+                loop {
+                    print!(Color::YELLOW; "\x7fDATE: {:04}.{:02}.{:02} TIME: {:02}:{:02}.{:02}",
+                        rtc.read(CMOSAddr::RTC_DAY_OF_MONGTH),
+                        rtc.read(CMOSAddr::RTC_MONTH),
+                        rtc.read(CMOSAddr::RTC_YEAR),
+                        rtc.read(CMOSAddr::RTC_HOURS),
+                        rtc.read(CMOSAddr::RTC_MINUTES),
+                        rtc.read(CMOSAddr::RTC_SECONDS),
+                    );
+                }
             },
         );
 
