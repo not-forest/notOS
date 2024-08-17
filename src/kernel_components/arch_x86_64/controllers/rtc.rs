@@ -49,7 +49,7 @@ impl RTC {
     /// Checking the current state of RTC clock's battery.
     ///
     /// Will return true if the battery is charged and RTC is working. If the battery is dead or
-    /// disconnected, returns false.
+    /// disconnected, will return false.
     pub fn is_powered(&self) -> bool {
         self.read(CMOSAddr::RTC_STATUS_D) >> 7 > 0
     }
