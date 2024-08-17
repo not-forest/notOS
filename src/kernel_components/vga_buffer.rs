@@ -9,13 +9,14 @@ use crate::{kernel_components::sync::Mutex, single, critical_section};
 
 const BUFFER_HEIGHT: usize = 25;
 const BUFFER_WIDTH: usize = 80;
+const BUFFER_ADDR: usize = 0xb8000;
 
 /// Creates a lazy initialization of a static Logger instance.
 single! {
-    LOGGER: Mutex<Logger> = Mutex::new(Logger {
+    pub LOGGER: Mutex<Logger> = Mutex::new(Logger {
         pos: 0,
         color_code: ColorCode::new(Color::WHITE, Color::BLACK),
-        buf: unsafe { &mut *(0xb8000 as *mut Buffer) } 
+        buf: unsafe { &mut *(BUFFER_ADDR as *mut Buffer) } 
     })
 }
 
@@ -32,6 +33,7 @@ impl Logger {
     pub(self) fn write(&mut self, byte: u8) {
         match byte {
             b'\n' => self.new_line(),
+            b'\x7f' => self.pos = 0,
             _ => {
                 if self.pos >= BUFFER_WIDTH {
                     self.new_line()
@@ -54,23 +56,8 @@ impl Logger {
     pub(self) fn write_str(&mut self, s: &str) {
         for byte in s.bytes() {
             match byte {
-                0x20..=0x7e | b'\n' => self.write(byte),
+                0x20..=0x7e | b'\n' | b'\x7f' => self.write(byte),
                 _ => self.write(0xfe),
-            }
-        }
-    }
-
-    /// Moves the cursor to a specific position on the VGA buffer
-    pub(self) fn move_cursor(&mut self, row: usize, col: usize) {
-        if row < BUFFER_HEIGHT && col < BUFFER_WIDTH {
-            self.pos = col;
-            self.new_line();
-
-            for i in 0..col {
-                self.buf.str[row][i] = Char {
-                    ascii_char: b' ',
-                    color_code: self.color_code,
-                };
             }
         }
     }
@@ -80,6 +67,17 @@ impl Logger {
         self.color_code = ColorCode::new(fr, bg);
     }
     
+    fn prev_line(&mut self) {
+        for row in (0..BUFFER_HEIGHT - 1).rev() {
+            for col in (0..BUFFER_WIDTH).rev() {
+                let character: Char = self.buf.str[row][col];
+                self.buf.str[row + 1][col] = character;
+            }
+        }
+
+        self.pos = 0;
+    }
+
     fn new_line(&mut self) {
         for row in 1..BUFFER_HEIGHT {
             for col in 0..BUFFER_WIDTH {
@@ -163,18 +161,6 @@ struct Buffer {
 }
 
 /// # Macros
-
-/// Moves the cursor's location to given row and column. 
-#[macro_export]
-macro_rules! move_cursor {
-    ($row:expr, $col:expr) => {
-        unsafe {
-            with_int_disabled(|| {
-                LOGGER.lock().move_cursor($row, $col);
-            });
-        }
-    };
-}
 
 /// Prints the content to the screen via VGA buffer. It does support coloring
 /// for background and foreground. Works the same way how print! from standard
@@ -260,14 +246,15 @@ macro_rules! warn {
 /// This macro will do nothing in release mode.
 #[macro_export]
 macro_rules! debug {
-    ($item:tt) => (
-        #[cfg(debug_assertions)]
-        $crate::println!($crate::Color::LIGHTCYAN; "{:#x?}", $item)
-    );
-    ($($item:tt),*) => (
-        $($crate::debug!($item);)*
-    );
     () => ();
+    ($fmt:expr) => (
+       #[cfg(debug_assertions)]
+        $crate::println!($crate::Color::LIGHTCYAN; concat!("DEBUG: " ,$fmt, '\n'))
+    );
+    ($fmt:expr, $($arg:tt)*) => (
+        #[cfg(debug_assertions)]
+        $crate::println!($crate::Color::LIGHTCYAN; concat!("DEBUG: ", $fmt, '\n'), $($arg)*)
+    );
 }
 
 #[doc(hidden)]
