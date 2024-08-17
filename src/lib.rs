@@ -186,6 +186,8 @@ pub mod kernel_components {
         /// Defines interfaces for different CPU inner controllers including those, that might
         /// cause IRQ interrupts. 
         pub mod controllers {
+            /// Real Time Clock chip management.
+            pub mod rtc;
             /// PS/2 controller management (Keyboard controller for old keyboards.)
             pub mod ps_2;
             /// Programmable Interrupt Controller management. (Legacy controller.)
@@ -195,6 +197,7 @@ pub mod kernel_components {
             /// Defines command words for PIC controllers for easy management.
             pub mod pic_command_words;
 
+            pub use rtc::{RTC, CMOSAddr};
             pub use pic::{PIC, PROGRAMMABLE_INTERRUPT_CONTROLLER};
             pub use ps_2::{PS2, PSControllerCommand, PSControllerConfiguration};
         }
