@@ -1,6 +1,6 @@
-use core::mem;
-
-/// Module that allows to manage RTC chip and manipulate with it's 64 bytes of CMOS RAM.
+/// Module that allows to manage RTC chip and manipulate with it's 64 bytes of CMOS RAM. It also
+/// allows to access the NMI enable bit and several other hardware specific information bytes,
+/// which are mapped to CMOS chip memory.
 
 use crate::{
     bitflags, critical_section, kernel_components::arch_x86_64::{
@@ -39,6 +39,8 @@ pub struct RTC {
     /// Port 0x71, which is used to read/write actual values within the CMOS memory. Even though it
     /// is RW, writing anything other than to calibrate the RTC is a very bad idea.
     data: GenericPort<u8>,
+    /// A boolean that defines if NMI interrupt must be enabled or not. Disabled by default.
+    nmi: bool,
 }
 
 impl RTC {
@@ -47,15 +49,26 @@ impl RTC {
         Self {
             index: GenericPort::new(0x70, PortAccessType::WRITEONLY),
             data: GenericPort::new(0x71, PortAccessType::READWRITE),
+            nmi: false,
         }
     }
 
-    /// Must be used in the end of IRQ8 handler function.
+    /// Reads the status A register value.
+    pub fn status_a(&self) -> RTCStatusA {
+        self.read(CMOSAddr::RTC_STATUS_A).into()
+    }
+
+    /// Reads the status B register value.
+    pub fn status_b(&self) -> RTCStatusB {
+        self.read(CMOSAddr::RTC_STATUS_B).into()
+    }
+
+    /// Reads the status C register value.
     ///
-    /// The chip won't generate new interrupt signals, until the C status register is not read.
-    /// This function does just this, with the ability to preserve or remove the NMI bit. 
-    pub fn ping(&self, nmi: bool) {
-        self.read((0x0cu8 | (nmi as u8) << 7).into());
+    /// Must be used in the end of IRQ8 handler function so that new interrupts can occur. On each
+    /// read the register will be also be cleared fully.
+    pub fn status_c(&self) -> RTCStatusC {
+        self.read(CMOSAddr::RTC_STATUS_C).into()
     }
 
     /// Checking the current state of RTC clock's battery.
@@ -68,7 +81,14 @@ impl RTC {
 
     /// Enables NMI interrupts.
     pub fn enable_nmi(&mut self) {
-        self.read((1u8 << 7).into());
+        self.nmi = true;
+        self.read(0.into());
+    }
+
+    /// Disables NMI interrupts.
+    pub fn disable_nmi(&mut self) {
+        self.nmi = false;
+        self.read(0.into());
     }
 
     /// Reads a value written inside the CMOS memory under a specific address provided.
@@ -78,7 +98,7 @@ impl RTC {
     /// requested byte from the data port. This operation must be atomic.
     pub fn read(&self, addr: CMOSAddr) -> u8 {
         critical_section!(|| {
-            self.index.write(addr.bits());
+            self.index.write(addr.bits() | (self.nmi as u8) << 7);
             DEBUG_BOARD.write(0); // Small delay.
             self.data.read()
         })
@@ -89,7 +109,8 @@ impl RTC {
     /// # Unsafe
     ///
     /// As mentioned above, only writes to the RTC configuration (status registers A/B) are safe.
-    /// Writing values to other memory fields are most likely to create a mess in the system.
+    /// Writing values to other memory fields are most likely to create a mess in the system. When
+    /// writing data, NMI will always be disabled.
     pub unsafe fn write(&mut self, addr: CMOSAddr, byte: u8) {
         critical_section!(|| {
             self.index.write(addr.bits());
@@ -97,13 +118,46 @@ impl RTC {
             self.data.write(byte);
         })
     }
+
+    /// Writes some byte to the CMOS memory under a specific address preserving all bytes specified
+    /// in 'preserve' variable.
+    ///
+    /// All bits specified in 'preserve' byte variable will be preserved when writing 'byte' to the
+    /// CMOS memory. The address byte resets each time we read or write values, therefore we have
+    /// to set address twice on each read and write.
+    ///
+    /// # Unsafe
+    ///
+    /// As mentioned above, only writes to the RTC configuration (status registers A/B) are safe.
+    /// Writing values to other memory fields are most likely to create a mess in the system.
+    pub unsafe fn write_preserved(&mut self, addr: CMOSAddr, byte: u8, preserve: u8) {
+        let b = self.read(addr);
+        self.write(addr, (byte & !preserve) | (b & preserve));
+    }
+}
+
+/// Converts the BCD format to regular binary.
+///
+/// Binary format is exactly what you would expect the time and date value to be. If the time is 
+/// 1:59:48 AM, then the value of hours would be 1, minutes would be 59 = 0x3b, and seconds would 
+/// be 48 = 0x30. In BCD format the same values would be represented as so: 1:59:48 has hours = 1, 
+/// minutes = 0x59 = 89, seconds = 0x48 = 72.
+///
+/// # Use Case
+///
+/// Only use this function if your chip doesn't allow to modify the status register B within the
+/// CMOS memory space. Change the DATA_MODE bit in the status register to force chip to represent
+/// values in proper format.
+pub fn bcd2bin(bcd: u8) -> u8 {
+    ((bcd & 0xF0) >> 1) + ( (bcd & 0xF0) >> 3) + (bcd & 0xf)
 }
 
 bitflags! {  
     /// Defines indexes of the CMOS RAM.
     ///
-    /// Those values must be used to read or write data from the RTC's memory. Most of them are read
-    /// only, except for RTC status registers A and B. 
+    /// Those values must be used to read or write data from the RTC's memory. Usually only status
+    /// register A and B used for configuration purposes and first 10 addresses for obtaining data
+    /// from the clock about the current time.
     ///
     /// Not all addresses are consistent, and most of them are chip-specific, therefore a custom byte 
     /// should be used to match a specific need. For example a RTC register that provides information 
@@ -115,24 +169,24 @@ bitflags! {
     pub struct CMOSAddr: u8 {
         /* RTC Clock Related Registers */
 
-        /// Current time (seconds) [R]
+        /// Current time (seconds) [RW]
         const RTC_SECONDS                                   = 0x00,
         ///
         const RTC_SECOND_ALARM                              = 0x01,
-        /// Current time (minutes) [R]
+        /// Current time (minutes) [RW]
         const RTC_MINUTES                                   = 0x02,
         /// 
         const RTC_MINUTE_ALARM                              = 0x03,
-        /// Current time (hours) [R]
+        /// Current time (hours) [RW]
         const RTC_HOURS                                     = 0x04,
         const RTC_HOUR_ALARM                                = 0x05,
-        /// Current date (day of the week) [R]
+        /// Current date (day of the week) [RW]
         const RTC_DAY_OF_WEEK                               = 0x06,
-        /// Current date (day of the month) [R]
+        /// Current date (day of the month) [RW]
         const RTC_DAY_OF_MONGTH                             = 0x07,
-        /// Current date (current month) [R]
+        /// Current date (current month) [RW]
         const RTC_MONTH                                     = 0x08,
-        /// Current date (current year) [R]
+        /// Current date (current year) [RW]
         const RTC_YEAR                                      = 0x09,
         /// RTC's A status register. [RW]
         ///
@@ -182,7 +236,7 @@ bitflags! {
     /// at least 244 microseconds are available to access clock/calendar bytes. This bit is
     /// supposed to be read-only.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-    pub struct RCTStatusA: u8 {
+    pub struct RTCStatusA: u8 {
         /* BITS: 3 - 0. Define the periodic interrupt rate. */
 
         /// Two interrupts per second (if not time machine)
@@ -217,19 +271,19 @@ bitflags! {
         /* BITS: 6 - 4. Define prescaler value. */
 
         /// Biggest prescaled frequency.
-        const TIME_FASTEST          = 0b000,
+        const TIME_FASTEST          = 0b000 << 4,
         /// Second biggest prescaled frequency.
-        const TIME_FAST             = 0b001, 
+        const TIME_FAST             = 0b001 << 4, 
         /// Divides the clock perfectly to obtain one real time second. DEFAULT VALUE.
-        const TIME_REAL             = 0b010,
+        const TIME_REAL             = 0b010 << 4,
         /// Fourth smallest prescaled frequency.
-        const TIME_SLOW             = 0b011,
+        const TIME_SLOW             = 0b011 << 4,
         /// Third smallest prescaled frequency.
-        const TIME_SLOTH            = 0b100,
+        const TIME_SLOTH            = 0b100 << 4,
         /// Second smallest prescaled frequency.
-        const TIME_SNAIL            = 0b110,
+        const TIME_SNAIL            = 0b110 << 4,
         /// Smallest prescaled frequency.
-        const TIME_MATRIX           = 0b111,
+        const TIME_MATRIX           = 0b111 << 4,
         
         /// Update In Progress (UIP) flag
         ///
@@ -238,4 +292,77 @@ bitflags! {
         /// supposed to be read-only.
         const UIP                   = 1 << 7,
     };
+
+    /// RTC Status B register. [RW]
+    ///
+    /// Seconds RTC configuration register that enables or disables certain features based on the
+    /// bitmask used. Allows to enable different interrupt sources, change the output data mode and more.
+    ///
+    /// # Warn
+    /// 
+    /// Some RTC CMOS chips do not allow to change this status register, therefore obtained values
+    /// format should be converted to a desired representation software way.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+    pub struct RTCStatusB: u8 {
+        /// Enables two special updates: last Sunday in April time will go 01:59:59 -> 03:00:00 and last 
+        /// Sunday in October 01:59:59 -> 01:00:00. This bit is unset by default.
+        const DAYLIGHT_SAVINGS          = 1 << 0,
+        /// Controls hour representation (24/12). When set, a 24 hour format is used. When unset -
+        /// 12 hour format. This bit is set by default.
+        const HOUR_SELECTION            = 1 << 1,
+        /// Defines bits format for representing time. If unset, all time and date registers will
+        /// hold values written in BCD format. If set, uses a regular binary format.
+        /// 
+        /// Binary format is exactly what you would expect the time and date value to be. If the time is 
+        /// 1:59:48 AM, then the value of hours would be 1, minutes would be 59 = 0x3b, and seconds would 
+        /// be 48 = 0x30. In BCD format the same values would be represented as so: 1:59:48 has hours = 1, 
+        /// minutes = 0x59 = 89, seconds = 0x48 = 72.
+        const DATA_MODE                 = 1 << 2,
+        /// UNUSED. Enables a square wave output on the SQW pin at the frequency specified in rate
+        /// selection bits (3 - 0) in status register A. This pin is not connected to anything in
+        /// x86 architecture.
+        const SQUARE_WAVE_OUTPUT        = 1 << 3,
+        /// If this bit is set, interrupt will be asserted once each second after the end of update
+        /// cycle. This bit is automatically cleared if CYCLE_UPDATE bit is set.
+        const UPDATE_ENDED_INTERRUPT    = 1 << 4,
+        /// Interrupt will be asserted once for each second that the current time matches the alarm time.
+        const ALARM_INTERRUPT           = 1 << 5,
+        /// When set, periodic interrupt will occur at frequency specified in rate selection bits
+        /// (3 - 0) in status register A.
+        const PERIODIC_INTERRUPT        = 1 << 6,
+        /// When set, any current update in progress is aborted. During this you can initialize the
+        /// clock, date and alarms manually by writing data to them. When set, the UPDATE_ENDED_INTERRUPT 
+        /// bit is cleared. When cleared, the update cycle is continued.
+        const CYCLE_UPDATE_ABORT        = 1 << 7,
+    };
+
+    /// RTC Status C register [R]
+    ///
+    /// A read only register that must be read each time the IRQ8 is handled by the OS. It allows
+    /// to define which type of interrupt occured in the chip and caused the IRQ8. All four bit
+    /// flags are cleared when this register is read.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+    pub struct RTCStatusC: u8 {
+        // Bits (3 - 0) are reserved and always 0.
+        /// When set the update-ended alarm interrupt has occurred.
+        const UPDATE_ENDED_INTERRUPT          = 1 << 4,
+        /// When set the alarm interrupt has occurred.
+        const ALARM_INTERRUPT                 = 1 << 5,
+        /// When set the periodic interrupt has occurred.
+        const PERIODIC_INTERRUPT              = 1 << 6,
+        /// Set when one of the interrupts enabled in status register B has occured.
+        const INTERRUPT_REQUEST               = 1 << 7,
+    };
+}
+
+impl Default for RTCStatusA {
+    fn default() -> Self {
+        RTCStatusA::TIME_REAL | RTCStatusA::INTSEC1024
+    }
+}
+
+impl Default for RTCStatusB {
+    fn default() -> Self {
+        RTCStatusB::HOUR_SELECTION
+    }
 }
