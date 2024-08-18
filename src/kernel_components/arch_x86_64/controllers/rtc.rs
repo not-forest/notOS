@@ -50,6 +50,14 @@ impl RTC {
         }
     }
 
+    /// Must be used in the end of IRQ8 handler function.
+    ///
+    /// The chip won't generate new interrupt signals, until the C status register is not read.
+    /// This function does just this, with the ability to preserve or remove the NMI bit. 
+    pub fn ping(&self, nmi: bool) {
+        self.read((0x0cu8 | (nmi as u8) << 7).into());
+    }
+
     /// Checking the current state of RTC clock's battery.
     ///
     /// Will return true if the battery is charged and RTC is working. If the battery is dead or
@@ -60,7 +68,7 @@ impl RTC {
 
     /// Enables NMI interrupts.
     pub fn enable_nmi(&mut self) {
-        self.read(unsafe{mem::transmute(1u8 << 7)});
+        self.read((1u8 << 7).into());
     }
 
     /// Reads a value written inside the CMOS memory under a specific address provided.
@@ -70,7 +78,7 @@ impl RTC {
     /// requested byte from the data port. This operation must be atomic.
     pub fn read(&self, addr: CMOSAddr) -> u8 {
         critical_section!(|| {
-            self.index.write(addr as u8);
+            self.index.write(addr.bits());
             DEBUG_BOARD.write(0); // Small delay.
             self.data.read()
         })
@@ -84,72 +92,71 @@ impl RTC {
     /// Writing values to other memory fields are most likely to create a mess in the system.
     pub unsafe fn write(&mut self, addr: CMOSAddr, byte: u8) {
         critical_section!(|| {
-            self.index.write(addr as u8);
+            self.index.write(addr.bits());
             DEBUG_BOARD.write(0); // Small delay.
             self.data.write(byte);
         })
     }
 }
 
-/// Defines indexes of the CMOS RAM.
-///
-/// Those values must be used to read or write data from the RTC's memory. Most of them are read
-/// only, except for RTC status registers A and B. 
-///
-/// Not all addresses are consistent, and most of them are chip-specific, therefore a custom byte 
-/// should be used to match a specific need. For example a RTC register that provides information 
-/// about current century might exist on the chip. To obtain a proper index, one should find it
-/// inside the FADT ACPI table. If it is some value other than zero, than this value is the index
-/// of this register. 
-#[repr(u8)]
-#[allow(non_camel_case_types)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum CMOSAddr {
-    /* RTC Clock Related Registers */
+bitflags! {  
+    /// Defines indexes of the CMOS RAM.
+    ///
+    /// Those values must be used to read or write data from the RTC's memory. Most of them are read
+    /// only, except for RTC status registers A and B. 
+    ///
+    /// Not all addresses are consistent, and most of them are chip-specific, therefore a custom byte 
+    /// should be used to match a specific need. For example a RTC register that provides information 
+    /// about current century might exist on the chip. To obtain a proper index, one should find it
+    /// inside the FADT ACPI table. If it is some value other than zero, than this value is the index
+    /// of this register.
+    #[allow(non_camel_case_types)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+    pub struct CMOSAddr: u8 {
+        /* RTC Clock Related Registers */
 
-    /// Current time (seconds) [R]
-    RTC_SECONDS,
-    ///
-    RTC_SECOND_ALARM,
-    /// Current time (minutes) [R]
-    RTC_MINUTES,
-    /// 
-    RTC_MINUTE_ALARM,
-    /// Current time (hours) [R]
-    RTC_HOURS,
-    RTC_HOUR_ALARM,
-    /// Current date (day of the week) [R]
-    RTC_DAY_OF_WEEK,
-    /// Current date (day of the month) [R]
-    RTC_DAY_OF_MONGTH,
-    /// Current date (current month) [R]
-    RTC_MONTH,
-    /// Current date (current year) [R]
-    RTC_YEAR,
-    /// RTC's A status register. [RW]
-    ///
-    /// Allows to configure RTC's frequency by changing the interrupt rate. Also holds bits for 22
-    /// stage divider.
-    RTC_STATUS_A = 0x0a,
-    /// RTC's B status register. [RW]
-    ///
-    /// Allows to configure different flags and modes for the RTC.
-    RTC_STATUS_B = 0x0b,
-    /// RTC's C status register. [R]
-    ///
-    /// A read-only register that holds information in form of flags about different interrupts.
-    /// This register must be read after IRQ8 interrupt, otherwise another one won't be called. 
-    RTC_STATUS_C = 0x0c,
-    /// RTC's D status register. [R]
-    ///
-    /// A read-only register with one flag, that defines the current state of RTC's battery.
-    RTC_STATUS_D = 0x0d,
+        /// Current time (seconds) [R]
+        const RTC_SECONDS                                   = 0x00,
+        ///
+        const RTC_SECOND_ALARM                              = 0x01,
+        /// Current time (minutes) [R]
+        const RTC_MINUTES                                   = 0x02,
+        /// 
+        const RTC_MINUTE_ALARM                              = 0x03,
+        /// Current time (hours) [R]
+        const RTC_HOURS                                     = 0x04,
+        const RTC_HOUR_ALARM                                = 0x05,
+        /// Current date (day of the week) [R]
+        const RTC_DAY_OF_WEEK                               = 0x06,
+        /// Current date (day of the month) [R]
+        const RTC_DAY_OF_MONGTH                             = 0x07,
+        /// Current date (current month) [R]
+        const RTC_MONTH                                     = 0x08,
+        /// Current date (current year) [R]
+        const RTC_YEAR                                      = 0x09,
+        /// RTC's A status register. [RW]
+        ///
+        /// Allows to configure RTC's frequency by changing the interrupt rate. Also holds bits for 22
+        /// stage divider.
+        const RTC_STATUS_A                                  = 0x0a,
+        /// RTC's B status register. [RW]
+        ///
+        /// Allows to configure different flags and modes for the RTC.
+        const RTC_STATUS_B                                  = 0x0b,
+        /// RTC's C status register. [R]
+        ///
+        /// A read-only register that holds information in form of flags about different interrupts.
+        /// This register must be read after IRQ8 interrupt, otherwise another one won't be called. 
+        const RTC_STATUS_C                                  = 0x0c,
+        /// RTC's D status register. [R]
+        ///
+        /// A read-only register with one flag, that defines the current state of RTC's battery.
+        const RTC_STATUS_D                                  = 0x0d,
 
-    /* Non Clock Registers */
+        /* Non Clock Registers */
 
-}
+    };
 
-bitflags! {
     /// RTC Status A register.
     ///
     /// A first configuration registor, which can be used to control the frequency of upcoming
@@ -230,5 +237,5 @@ bitflags! {
         /// at least 244 microseconds are available to access clock/calendar bytes. This bit is
         /// supposed to be read-only.
         const UIP                   = 1 << 7,
-    }
+    };
 }
