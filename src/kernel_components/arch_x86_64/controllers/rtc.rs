@@ -21,6 +21,24 @@ use crate::{
 /// frequency can be reprogrammed as well as prescaled via it's status registors, however it will
 /// completely ruin it's purpose.
 ///
+/// # Interrupts
+///
+/// RTC interrupt pin is connected to IRQ8 line. The chip can generate three different types of 
+/// interrupts: 
+/// - update-ended: 
+/// This is the simplest type - interrupt is generated after each clock update exactly every 1 second.
+/// - alarm:
+/// This is a second type - it generates interrupt at time specified in alarm registers. For
+/// example 00:00.00 will cause one interrupt when it is 0 AM. FF:FF.00 will generate alarm
+/// interrupt every minute etc. 
+/// - periodic:
+/// The frequency of this interrupt is programmable from 2 to 8192 per second (if real time frequency).
+///
+/// To use RTC interrupt first install interrupt service routine and remap PIC controller vector, then 
+/// program RTC status registers A and B. More than one interrupt type can be enabled at the same time 
+/// (configured in status register B), in that case your interrupt handler should check which type has 
+/// occurred (by reading status register C).
+///
 /// # Warn
 ///
 /// When programming this chip all interrupts must be disabled, including the NMI. Both ports must
@@ -171,14 +189,15 @@ bitflags! {
 
         /// Current time (seconds) [RW]
         const RTC_SECONDS                                   = 0x00,
-        ///
+        /// Alarm value for seconds.
         const RTC_SECOND_ALARM                              = 0x01,
         /// Current time (minutes) [RW]
         const RTC_MINUTES                                   = 0x02,
-        /// 
+        /// Alarm value for minutes.
         const RTC_MINUTE_ALARM                              = 0x03,
         /// Current time (hours) [RW]
         const RTC_HOURS                                     = 0x04,
+        /// Alarm value for hours.
         const RTC_HOUR_ALARM                                = 0x05,
         /// Current date (day of the week) [RW]
         const RTC_DAY_OF_WEEK                               = 0x06,
@@ -208,7 +227,44 @@ bitflags! {
         const RTC_STATUS_D                                  = 0x0d,
 
         /* Non Clock Registers */
+        /// Diagnostic information from POST about RTC and CMOS.
+        const POST_DIAGNOSTIC_STATUS                        = 0x0e,
+        /// This byte is read upon startup after CPU reset in order to determine if the reset cause 
+        /// (to get out of protected mode etc.)
+        const SHUTDOWN_STATUS                               = 0xef,
 
+        /* Memory/Drives/Diskettes */
+        /// Old way of defining amount of memory in connected diskette.   
+        const DISKETTE_DRIVE_TYPE                           = 0x10,
+        // 0x11 is reserved.
+        /// Old way of defining amount of memory in connected disk.
+        const HARD_DRIVE_TYPE                               = 0x12,
+        // 0x13 is reserved.
+        /// 
+        const EQUIPMENT                                     = 0x14,
+        /// Low bytes of base memory size in kbytes.
+        const BASE_MEMORY_LOW                               = 0x15,
+        /// High bytes of base memory size in kbytes.
+        const BASE_MEMORY_HIGH                              = 0x16,        
+        /// Extended memory size above 1M. in kbytes.
+        const EXTENDED_MEMORY_LOW                           = 0x17,
+        /// Extended memory size above 1M. in kbytes.
+        const EXTENDED_MEMORY_HIGH                          = 0x18,
+        /// Disk 0 type if (CMOS addr 12H & 0fH) is 0fH
+        const DISK_0_TYPE                                   = 0x19,
+        /// Disk 1 type if (CMOS addr 12H & f0H) is f0H
+        const DISK_1_TYPE                                   = 0x1a,
+        // 0x1b - 0x2d are reserved.
+        /// Checksum of CMOS addresses 10H through 20H
+        const CHECKSUM_LOW                                  = 0x2e,
+        /// Checksum of CMOS addresses 10H through 20H
+        const CHECKSUM_HIGH                                 = 0x2f,
+        // 0x30 - 0x31 are reserved.
+        /// Current century. Not always there, please check the FADT table entry.
+        const CENTURY                                       = 0x32,
+        /// Miscellaneous flags
+        const MISCELLANEOUS                                 = 0x33,
+        // 0x34 - 0x3f are reserved.
     };
 
     /// RTC Status A register.
