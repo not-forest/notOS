@@ -142,21 +142,26 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
 
 
         let p1 = Process::new_void(stack1, 0, 1, 1, None,
-            |t| {
+            |_t| {
                 use notOS::Color;
-                use notOS::kernel_components::arch_x86_64::controllers::{RTC, CMOSAddr};
+                use notOS::kernel_components::arch_x86_64::controllers::rtc::{RTC, CMOSAddr, RCTStatusA};
 
                 println!(Color::BLUE; "Reading current's date and time.");
-                let rtc = RTC::new();
+                let mut rtc = RTC::new();
+
+                fn bcd_to_time(bcd: u8) -> u8 {
+                    ((bcd & 0xF0) >> 1) + ( (bcd & 0xF0) >> 3) + (bcd & 0xf)
+                }
 
                 loop {
-                    print!(Color::YELLOW; "\x7fDATE: {:04}.{:02}.{:02} TIME: {:02}:{:02}.{:02}",
-                        rtc.read(CMOSAddr::RTC_DAY_OF_MONGTH),
-                        rtc.read(CMOSAddr::RTC_MONTH),
-                        rtc.read(CMOSAddr::RTC_YEAR),
-                        rtc.read(CMOSAddr::RTC_HOURS),
-                        rtc.read(CMOSAddr::RTC_MINUTES),
-                        rtc.read(CMOSAddr::RTC_SECONDS),
+                    while rtc.read(CMOSAddr::RTC_STATUS_A) & RCTStatusA::UIP.bits() != 0 {}
+                    print!(Color::YELLOW; "\x7fDATE: {:02}.{:02}.{:02} TIME: {:02}:{:02}.{:02}",
+                        bcd_to_time(rtc.read(CMOSAddr::RTC_DAY_OF_MONGTH)),
+                        bcd_to_time(rtc.read(CMOSAddr::RTC_MONTH)),
+                        bcd_to_time(rtc.read(CMOSAddr::RTC_YEAR)),
+                        bcd_to_time(rtc.read(CMOSAddr::RTC_HOURS)),
+                        bcd_to_time(rtc.read(CMOSAddr::RTC_MINUTES)),
+                        bcd_to_time(rtc.read(CMOSAddr::RTC_SECONDS)),
                     );
                 }
             },
