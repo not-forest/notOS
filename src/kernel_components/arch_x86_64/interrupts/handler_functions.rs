@@ -68,20 +68,20 @@ pub mod predefined {
     #[no_mangle]
     unsafe extern "x86-interrupt" fn division_by_zero_handler(stack_frame: InterruptStackFrame) -> ! {
         println!(Color::RED; "EXCEPTION: Division by zero.");
-        debug!(stack_frame);
+        debug!("{:#?}", stack_frame);
         loop {}
     }
 
     #[no_mangle]
     unsafe extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
         println!(Color::RED; "EXCEPTION: Breakpoint");
-        debug!(stack_frame);
+        debug!("{:#?}", stack_frame);
     }
 
     #[no_mangle]
     unsafe extern "x86-interrupt" fn double_fault_handler(stack_frame: InterruptStackFrame) {
         println!(Color::RED; "EXCEPTION: Double Fault");
-        debug!(stack_frame);
+        debug!("{:#?}", stack_frame);
         loop {}
     }
 
@@ -92,7 +92,7 @@ pub mod predefined {
     ) {
         critical_section!(|| {
             println!(Color::RED; "EXCEPTION: Page Fault");
-            debug!(stack_frame);
+            debug!("{:#?}", stack_frame);
     
             print!("Error code flags: ");
             for error in PageFaultErrorCode::as_array() {
@@ -180,7 +180,6 @@ pub mod software {
 
         // Pushing new process if it exist.
         PROCESS_MANAGEMENT_UNIT.dequeue();
-        //crate::println!(Color::RED; "{0:x}", stack_frame.stack_ptr);
 
         // Perform a task switch.
         //
