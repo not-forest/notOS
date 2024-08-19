@@ -154,6 +154,7 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
                     PITCommand::SQUARE_WAVE_GENERATOR   |
                     PITCommand::BINARY16BIT
                 ); 
+
                 pit.channel0.write(u16::MAX);
             },
         );
