@@ -144,27 +144,17 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
         let p1 = Process::new_void(stack1, 0, 1, 1, None,
             |_t| {
                 use notOS::Color;
-                use notOS::kernel_components::arch_x86_64::controllers::rtc::{RTC, CMOSAddr, RTCStatusA, RTCStatusB};
+                use notOS::kernel_components::arch_x86_64::controllers::{PIT, PITCommand};
 
-                println!(Color::BLUE; "Reading current's date and time.");
-                let mut rtc = RTC::new();
-                rtc.write_preserved(
-                    CMOSAddr::RTC_STATUS_B, 
-                    RTCStatusB::DATA_MODE.bits(),
-                    RTCStatusB::HOUR_SELECTION.bits(),
-                );
-
-                loop {
-                    while rtc.read(CMOSAddr::RTC_STATUS_A) & RTCStatusA::UIP.bits() != 0 {}
-                    print!(Color::YELLOW; "\x7fDATE: {:02}.{:02}.{:02} TIME: {:02}:{:02}.{:02}",
-                        rtc.read(CMOSAddr::RTC_DAY_OF_MONGTH),
-                        rtc.read(CMOSAddr::RTC_MONTH),
-                        rtc.read(CMOSAddr::RTC_YEAR),
-                        rtc.read(CMOSAddr::RTC_HOURS),
-                        rtc.read(CMOSAddr::RTC_MINUTES),
-                        rtc.read(CMOSAddr::RTC_SECONDS),
-                    );
-                }
+                let mut pit = PIT::new();
+                println!(Color::BLUE; "Configuring the PIT chip");
+                pit.command(
+                    PITCommand::CHANNEL0                | 
+                    PITCommand::FULL_WORD               | 
+                    PITCommand::SQUARE_WAVE_GENERATOR   |
+                    PITCommand::BINARY16BIT
+                ); 
+                pit.channel0.write(u16::MAX);
             },
         );
 
