@@ -202,7 +202,7 @@ bitflags! {
         /// Current date (day of the week) [RW]
         const RTC_DAY_OF_WEEK                               = 0x06,
         /// Current date (day of the month) [RW]
-        const RTC_DAY_OF_MONGTH                             = 0x07,
+        const RTC_DAY_OF_MONTH                             = 0x07,
         /// Current date (current month) [RW]
         const RTC_MONTH                                     = 0x08,
         /// Current date (current year) [RW]
