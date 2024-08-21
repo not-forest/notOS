@@ -132,27 +132,11 @@ impl Stack {
         let b = self.bottom;
 
         if self.size() > 0 {
-            self.bottom -= amount;
+            self.bottom += amount;
             Ok(b)
         } else {
             Err(b)
         }
-    }
-
-    /// Shrinks or grows the stack to the provided size
-    ///
-    /// # Note
-    ///
-    /// Here the amount is assumed to be in bytes.
-    ///
-    /// # Panics
-    ///
-    /// This function will panic if the size provided is zero.
-    #[inline(always)]
-    pub fn resize_to(&mut self, size: usize) {
-        assert!(size != 0, "The stack size could not be zero. Deallocate the stack instead.");
-
-        self.bottom = self.top - size;
     }
 
     /// Grows the stack based on the input number.
@@ -167,7 +151,7 @@ impl Stack {
     #[inline(always)]
     pub fn grow(&mut self, amount: usize) -> usize {
         let b = self.bottom;
-        self.bottom += amount;
+        self.bottom -= amount;
         b
     }
 
