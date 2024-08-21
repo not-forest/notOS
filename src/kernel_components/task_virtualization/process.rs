@@ -223,14 +223,14 @@ impl<'a> Process<'a> {
     /// all existing threads and the function that is being used within the requested thread.
     #[inline]
     pub fn alloc_stack(&mut self) -> Stack {
-        // For now allocating 128 bytes for every thread. TODO! Get rid of this voodoo constant.
+        // For now allocating 4096 bytes for every thread. TODO! Get rid of this voodoo constant.
         const STARTING_OFFSET: usize = 4096;
         let mut stack = self.stack.clone();
 
         // crate::println!("{0:x?}", stack);
         
-        stack.resize_to(STARTING_OFFSET);
-        stack.shift_left(STARTING_OFFSET * self.threads.len());
+        stack.top = stack.bottom + STARTING_OFFSET;
+        stack.shift_right(STARTING_OFFSET * self.threads.len());
 
         // crate::println!("{0:x?}", stack);
 
