@@ -1,8 +1,16 @@
 /// A driver module for PS/2 Keyboard.
 
-use crate::kernel_components::drivers::Driver;
-use super::{Key, ScancodeSetTrait, KeyboardLayout, Modifiers, KeyCode, ScanCode, ScancodeError};
+use crate::{kernel_components::{drivers::Driver, sync::Mutex}, single};
+use super::{keyboard::KeyboardDriver, layouts::US104KEY, Key, KeyCode, KeyboardLayout, Modifiers, ScanCode, ScancodeError, ScancodeSet1, ScancodeSetTrait};
 use core::fmt::Debug;
+
+/// A global keyboard static variable.
+single! {
+    pub PS2_KEYBOARD: Mutex<PS2Keyboard<ScancodeSet1, US104KEY>> = Mutex::new(PS2Keyboard::new(
+        ScancodeSet1,
+        US104KEY,
+    ));
+}
 
 /// A driver for a PS/2 keyboard.
 /// 
@@ -76,4 +84,3 @@ impl<S: ScancodeSetTrait + Debug + Clone + Copy, L: KeyboardLayout> PS2Keyboard<
     }
 }
 
-impl<S: ScancodeSetTrait + Debug + Clone + Copy, L: KeyboardLayout> Driver for PS2Keyboard<S, L> {}
