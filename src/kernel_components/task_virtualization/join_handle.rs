@@ -101,6 +101,7 @@ impl<T: 'static> JoinHandle<T> {
     /// Waits until the thread finished doing it's job and returns the threads output value
     /// afterwards. This function consumes the handle and provides error handling when result does
     /// not exist while the thread has in fact exited somehow.
+    #[inline(never)]
     pub fn join(mut self) -> Result<Box<T>, ThreadOutputError> {
         // Halts until the data exist.
         while !self.exited_normally() {}
@@ -124,9 +125,7 @@ impl<T: 'static> JoinHandle<T> {
     /// valid at the moment of the call. If the thread state is not set it can only mean that it is
     /// running.pub fn status(&mut self) -> ThreadState {
     pub fn state(&self) -> ThreadState {
-        critical_section!(|| {
-            self.data.as_ref().thread_state.clone()
-        })
+        self.data.as_ref().thread_state.clone()
     }
 
     /// Allows to peek and see if the thread has completed it's task and returned
