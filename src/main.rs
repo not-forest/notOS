@@ -22,14 +22,13 @@ static HEADER_START_FUNC: unsafe extern "C" fn() = header_start;
 #[used(linker)]
 static HEADER_END_FUNC: unsafe extern "C" fn() = header_end;
 
+use alloc::boxed::Box;
 /// This is the main binary (kernel) space. As the library will build in, ew features will be added further.
 use notOS::{
     kernel_components::{
-        arch_x86_64::interrupts,
-        memory::MEMORY_MANAGEMENT_UNIT, 
-        registers::{control, ms},
+        arch_x86_64::interrupts, drivers::timers::ClockDriver, memory::MEMORY_MANAGEMENT_UNIT, registers::{control, ms}
     }, print, println, single, warn, BUDDY_ALLOC, FREE_LIST_ALLOC, GLOBAL_ALLOCATOR
-    };
+};
 
 #[no_mangle]
 pub extern "C" fn _start(_multiboot_information_address: usize) {
@@ -59,6 +58,11 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
         INTERRUPT_DESCRIPTOR_TABLE,
         InterruptVector, 
         GateDescriptor,
+    };
+
+    use notOS::kernel_components::drivers::{
+        DRIVER_MANAGER, DriverType,
+        timers::RealTimeClock,
     };
 
     use notOS::kernel_components::arch_x86_64::controllers::PROGRAMMABLE_INTERRUPT_CONTROLLER;
@@ -136,26 +140,36 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
 
         // Remapping the PIC controller.
         PROGRAMMABLE_INTERRUPT_CONTROLLER.lock().reinit_chained(32).remap();
-    
-        use notOS::kernel_components::task_virtualization::{Process, PROCESS_MANAGEMENT_UNIT};
-        let stack1 = MEMORY_MANAGEMENT_UNIT.allocate_stack(10).unwrap();
+   
+        // Creating drivers
+        let clock_driver: Box<dyn ClockDriver> = Box::new(RealTimeClock::new()); 
+        // Loading the drivers:
+        let _clock = DRIVER_MANAGER.load(clock_driver, DriverType::Clock);
 
+        
+        use notOS::kernel_components::task_virtualization::{Process, PROCESS_MANAGEMENT_UNIT};
+        let stack1 = MEMORY_MANAGEMENT_UNIT.allocate_stack(16).unwrap();
 
         let p1 = Process::new_void(stack1, 0, 1, 1, None,
-            |_t| {
+            |t| {
                 use notOS::Color;
-                use notOS::kernel_components::arch_x86_64::controllers::{PIT, PITCommand};
+                use notOS::kernel_components::task_virtualization::Thread;
 
-                let mut pit = PIT::new();
-                println!(Color::BLUE; "Configuring the PIT chip");
-                pit.command(
-                    PITCommand::CHANNEL0                | 
-                    PITCommand::FULL_WORD               | 
-                    PITCommand::SQUARE_WAVE_GENERATOR   |
-                    PITCommand::BINARY16BIT
-                ); 
+                println!(Color::BLUE; "Greetings in main thread.");
 
-                pit.channel0.write(u16::MAX);
+                let h1 = t.spawn(|_t| {
+                    println!(Color::GREEN; "I am a waiting thread. I will wait 5 seconds");
+                    Thread::sleep(5000);
+                    println!(Color::GREEN; "Time to wake up.");
+                });
+
+                let h2 = t.spawn(|_t| {
+                    println!(Color::PINK; "I am a fast thread. I won't wait at all.");
+                });
+
+                h2.join();
+                h1.join();
+                println!(Color::BLUE; "Main thread is done.");
             },
         );
 
