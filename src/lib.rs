@@ -2,7 +2,7 @@
 #![cfg_attr(test, no_main)]
 #![allow(incomplete_features, unused, non_snake_case, static_mut_refs)]
 #![feature(custom_test_frameworks, used_with_arg, error_in_core, ptr_metadata, slice_from_ptr_range,
-    generic_const_exprs, allocator_api, slice_ptr_get, maybe_uninit_array_assume_init, 
+    generic_const_exprs, allocator_api, slice_ptr_get, maybe_uninit_array_assume_init, map_try_insert,
     abi_x86_interrupt, asm_const, type_alias_impl_trait, tuple_trait, unboxed_closures)]
 #![test_runner(crate::test_runner)]
 #![reexport_test_harness_main = "test_main"]
