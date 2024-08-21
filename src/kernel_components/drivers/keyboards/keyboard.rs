@@ -8,12 +8,8 @@ use crate::kernel_components::drivers::Driver;
 use crate::kernel_components::sync::Mutex;
 use crate::single;
 
-/// A global keyboard static variable.
-single! {
-    pub GLOBAL_KEYBORD: Mutex<PS2Keyboard<ScancodeSet1, US104KEY>> = Mutex::new(PS2Keyboard::new(
-        ScancodeSet1,
-        US104KEY,
-    ));
+pub trait KeyboardDriver {
+
 }
 
 /// The keys that can be pressed by any keyboard.
