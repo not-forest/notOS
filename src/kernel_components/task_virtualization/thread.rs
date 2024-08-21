@@ -13,6 +13,8 @@ use alloc::sync::Arc;
 
 use crate::critical_section;
 use crate::kernel_components::arch_x86_64::interrupts::interrupt;
+use crate::kernel_components::drivers::timers::{ClockDriver, RealTimeClock};
+use crate::kernel_components::drivers::{DriverType, DRIVER_MANAGER};
 use crate::kernel_components::memory::stack_allocator::Stack;
 use crate::kernel_components::arch_x86_64::{
     controllers::PROGRAMMABLE_INTERRUPT_CONTROLLER, interrupts::{self, handler_functions::software::task_switch_call},
@@ -210,6 +212,21 @@ impl<'a> Thread<'a> {
         HandleStack(v)
     }
 
+    /// Sleeps for the provided amount of milliseconds.
+    ///
+    /// Until time is not passed, will yield to another thread to do something else. Uses the clock
+    /// driver to operate. Will panic if no clock driver is found.
+    #[inline(never)]
+    pub fn sleep(ms: u32) {
+        if let Some(clock) = unsafe{DRIVER_MANAGER.driver::<Box<dyn ClockDriver>>(DriverType::Clock)} {
+            let until = clock.now() + ms;
+
+            while let None = clock.dt(until) { Thread::r#yield() }
+        } else {
+            panic!("No clock driver available for sleep function.");
+        }
+    }
+
     /// Function for yielding the thread.
     ///
     /// This function will give up on the processor for the current thread. It works by simply
@@ -218,9 +235,9 @@ impl<'a> Thread<'a> {
     ///
     /// # Panics
     ///
-    /// This function will panic only if the interrupts are disabled. Yielding the thread while
-    /// interrupts are disabled could break the inner logic of the thread, therefore instead of
-    /// ignoring the software interrupt completely panic occurs. 
+    /// This function will panic only if interrupts are disabled. Yielding the thread while
+    /// interrupts are disabled could break the inner logic of the thread's program, therefore 
+    /// instead of ignoring the software interrupt completely panic occurs. 
     #[inline(never)]
     pub fn r#yield() {
         if interrupt::is_interrupts_enabled() {
