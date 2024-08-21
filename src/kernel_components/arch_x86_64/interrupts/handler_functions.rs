@@ -192,14 +192,7 @@ pub mod software {
 
             // Trying to obtain current tasks, if they exist.
             if let Some(task) = ROUND_ROBIN.current() { 
-                //println!("OLD TASK: {:#x?}", task);
-                // Trying to find the process by task's pid.
-                //
-                // If not exists, we can easily delete all tasks with this pid.
                 if let Some(process) = pmu.get_mut(task.pid) {
-                    // Trying to find the thread by task's tid.
-                    //
-                    // If not exists, we can delete this specific task.
                     if let Some(thread) = process.find_thread_mut(task.tid) {
                         // Doing some tasks to the previous thread, based on it's state.
                         match thread.thread_state {
@@ -214,47 +207,54 @@ pub mod software {
                 }
             }
             // Trying to obtain some new tasks from a scheduler if some.
-            if let Some(task) = ROUND_ROBIN.schedule() {
-                //println!("NEW TASK: {:#x?}", task);
-                // Trying to find the process by task's pid.
-                //
-                // If not exists, we can easily delete all tasks with this pid.
-                if let Some(process) = pmu.get_mut(task.pid) {
-                    // Trying to find the thread by task's tid.
+            loop {
+                if let Some(task) = ROUND_ROBIN.schedule() {
+                    // Trying to find the process by task's pid.
                     //
-                    // If not exists, we can delete this specific task.
-                    if let Some(thread) = process.find_thread_mut(task.tid) {
-                        // Doing different tasks based on the thread state.
-                        match thread.thread_state {
-                            ThreadState::INIT => {
-                                // If the thread is only about to run we must provide some additional information for it.
-                                //
-                                // This basically means that we must perform the fast-call calling convention manually, so the
-                                // thread can use a mutable reference to itself and perform the instructions.
-                                thread_input = thread as *const _ as usize;
-                                // Changing the state to running, which will not affect the thread's input.
-                                thread.thread_state = ThreadState::RUNNING;
+                    // If not exists, we can easily delete all tasks with this pid.
+                    if let Some(process) = pmu.get_mut(task.pid) {
+                        // Trying to find the thread by task's tid.
+                        //
+                        // If not exists, we can delete this specific task.
+                        if let Some(thread) = process.find_thread_mut(task.tid) {
+                            // Doing different tasks based on the thread state.
+                            match thread.thread_state {
+                                ThreadState::INIT => {
+                                    // If the thread is only about to run we must provide some additional information for it.
+                                    //
+                                    // This basically means that we must perform the fast-call calling convention manually, so the
+                                    // thread can use a mutable reference to itself and perform the instructions.
+                                    thread_input = thread as *const _ as usize;
+                                    // Changing the state to running, which will not affect the thread's input.
+                                    thread.thread_state = ThreadState::RUNNING;
 
-                                // Changing the thread state for the join handle.
-                                if let Some(o) = &mut thread.output {
-                                    o.change_state(ThreadState::RUNNING);
-                                }
-                            },
-                            _ => (),
+                                    // Changing the thread state for the join handle.
+                                    if let Some(o) = &mut thread.output {
+                                        o.change_state(ThreadState::RUNNING);
+                                    }
+
+                                    // Changing the current stack pointer to the thread's ones.
+                                    stack_frame.stack_ptr = thread.stack_ptr.load(Ordering::Acquire);
+                                    stack_frame.instruction_pointer = thread.instruction_ptr.load(Ordering::Acquire);
+                                },
+                                ThreadState::FINAL => (break),
+                                _ => (),
+                            }
+
+                            // Changing the current stack pointer to the thread's ones.
+                            stack_frame.stack_ptr = thread.stack_ptr.load(Ordering::Acquire);
+                            stack_frame.instruction_pointer = thread.instruction_ptr.load(Ordering::Acquire);
+                            break;
+                        } else {
+                            // If there are no underlying threads we must delete the hangling task
+                            ROUND_ROBIN.delete(*task);
                         }
-
-                        // Changing the current stack pointer to the thread's ones.
-                        stack_frame.stack_ptr = thread.stack_ptr.load(Ordering::Acquire);
-                        stack_frame.instruction_pointer = thread.instruction_ptr.load(Ordering::Acquire);
                     } else {
-                        // If there are no underlying threads we must delete the hangling task
+                        // If there are no underlying process, we must delete the hangling task
                         ROUND_ROBIN.delete(*task);
                     }
-                } else {
-                    // If there are no underlying process, we must delete the hangling task
-                    ROUND_ROBIN.delete(*task);
-                }
-            }    
+                }    
+            }
         });
 
         PROGRAMMABLE_INTERRUPT_CONTROLLER.lock().master.end_of_interrupt();
@@ -336,13 +336,13 @@ pub mod software {
     /// controlls with other aplications in some queue style.
     #[no_mangle]
     unsafe extern "x86-interrupt" fn keyboard_interrupt_handler(stack_frame: InterruptStackFrame) {
-        use crate::kernel_components::drivers::keyboards::GLOBAL_KEYBORD;
+        use crate::kernel_components::drivers::keyboards::PS2_KEYBOARD;
         use crate::kernel_components::arch_x86_64::interrupts;
 
         let scancode = PS2::new().read_data();
         
         critical_section!(|| {
-            let mut keyboard = GLOBAL_KEYBORD.lock();
+            let mut keyboard = PS2_KEYBOARD.lock();
 
             if let Ok(Some(keycode)) = keyboard.scan_key(scancode) {
                 if let Some(key) = keyboard.scan_char(keycode) {
