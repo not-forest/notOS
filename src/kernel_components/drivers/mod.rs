@@ -118,11 +118,11 @@ pub mod keyboards {
     /// PS/2 keyboard driver.
     pub mod ps2_keyboard;
 
-    pub use keyboard::{Key, KeyCode, Modifiers};
+    pub use keyboard::{Key, KeyCode, Modifiers, KeyboardDriver};
     pub use scancodes::{ScanCode, ScancodeError, ScancodeSetTrait, ScancodeSet1, ScancodeSet2};
     pub use layouts::KeyboardLayout;
 
-    pub use ps2_keyboard::{PS2Keyboard, PS2_KEYBOARD};
+    pub use ps2_keyboard::PS2Keyboard;
 }
 
 /// Mouse drivers.
