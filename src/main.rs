@@ -26,7 +26,7 @@ use alloc::boxed::Box;
 /// This is the main binary (kernel) space. As the library will build in, ew features will be added further.
 use notOS::{
     kernel_components::{
-        arch_x86_64::interrupts, drivers::timers::ClockDriver, memory::MEMORY_MANAGEMENT_UNIT, registers::{control, ms}
+        arch_x86_64::interrupts, drivers::{keyboards::{KeyboardDriver, PS2Keyboard}, timers::ClockDriver}, memory::MEMORY_MANAGEMENT_UNIT, registers::{control, ms}
     }, print, println, single, warn, BUDDY_ALLOC, FREE_LIST_ALLOC, GLOBAL_ALLOCATOR
 };
 
@@ -141,40 +141,24 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
         // Remapping the PIC controller.
         PROGRAMMABLE_INTERRUPT_CONTROLLER.lock().reinit_chained(32).remap();
    
-        // Creating drivers
-        let clock_driver: Box<dyn ClockDriver> = Box::new(RealTimeClock::new()); 
-        // Loading the drivers:
-        let _clock = DRIVER_MANAGER.load(clock_driver, DriverType::Clock);
+        // Loading drivers
+        {
+            let clock_driver: Box<dyn ClockDriver> = Box::new(RealTimeClock::new()); 
+            let keyboard_driver: Box<dyn KeyboardDriver> = Box::new(PS2Keyboard::default());
+
+            let _ = DRIVER_MANAGER.load(clock_driver, DriverType::Clock);
+            let _ = DRIVER_MANAGER.load(keyboard_driver, DriverType::Keyboard); 
+        }
 
         
         use notOS::kernel_components::task_virtualization::{Process, PROCESS_MANAGEMENT_UNIT};
         let stack1 = MEMORY_MANAGEMENT_UNIT.allocate_stack(16).unwrap();
 
-        let p1 = Process::new_void(stack1, 0, 1, 1, None,
-            |t| {
-                use notOS::Color;
-                use notOS::kernel_components::task_virtualization::Thread;
-
-                println!(Color::BLUE; "Greetings in main thread.");
-
-                let h1 = t.spawn(|_t| {
-                    println!(Color::GREEN; "I am a waiting thread. I will wait 5 seconds");
-                    Thread::sleep(5000);
-                    println!(Color::GREEN; "Time to wake up.");
-                });
-
-                let h2 = t.spawn(|_t| {
-                    println!(Color::PINK; "I am a fast thread. I won't wait at all.");
-                });
-
-                h2.join();
-                h1.join();
-                println!(Color::BLUE; "Main thread is done.");
-            },
-        );
+        // Using library shell program.
+        let shell = Process::new_void(stack1, 0, 1, 1, None, |_| {loop{}});
 
         // Pushing the process to the queue.
-        PROCESS_MANAGEMENT_UNIT.queue(p1);
+        PROCESS_MANAGEMENT_UNIT.queue(shell);
     }
 
     loop {
