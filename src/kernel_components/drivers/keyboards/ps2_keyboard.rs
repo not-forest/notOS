@@ -1,23 +1,15 @@
 /// A driver module for PS/2 Keyboard.
 
-use crate::{kernel_components::{drivers::Driver, sync::Mutex}, single};
+use crate::{kernel_components::{arch_x86_64::controllers::PS2, drivers::Driver, sync::Mutex}, single};
 use super::{keyboard::KeyboardDriver, layouts::US104KEY, Key, KeyCode, KeyboardLayout, Modifiers, ScanCode, ScancodeError, ScancodeSet1, ScancodeSetTrait};
 use core::fmt::Debug;
-
-/// A global keyboard static variable.
-single! {
-    pub PS2_KEYBOARD: Mutex<PS2Keyboard<ScancodeSet1, US104KEY>> = Mutex::new(PS2Keyboard::new(
-        ScancodeSet1,
-        US104KEY,
-    ));
-}
 
 /// A driver for a PS/2 keyboard.
 /// 
 /// This driver provides a support for receiving inputs from the PS/2 keyboard and translate
 /// them as the character or as a keycode which says about the key and it's state. Different
 /// layouts and scan codes can be used.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug)]
 pub struct PS2Keyboard<S, L> where 
     S: ScancodeSetTrait + Debug + Clone + Copy,
     L: KeyboardLayout,
@@ -25,6 +17,7 @@ pub struct PS2Keyboard<S, L> where
     modifiers: Modifiers,
     current_code: ScanCode<S>,
     layout: L,
+    controller: PS2,
 }
 
 impl<S: ScancodeSetTrait + Debug + Clone + Copy, L: KeyboardLayout> PS2Keyboard<S, L> {
@@ -47,6 +40,7 @@ impl<S: ScancodeSetTrait + Debug + Clone + Copy, L: KeyboardLayout> PS2Keyboard<
             },
             current_code: ScanCode::new(scancode_set),
             layout,
+            controller: PS2::new(),
         }
     }
 
@@ -84,3 +78,26 @@ impl<S: ScancodeSetTrait + Debug + Clone + Copy, L: KeyboardLayout> PS2Keyboard<
     }
 }
 
+impl Default for PS2Keyboard<ScancodeSet1, US104KEY> {
+    fn default() -> Self {
+        Self::new(ScancodeSet1, US104KEY)
+    }
+}
+
+impl<S: ScancodeSetTrait + Debug + Clone + Copy, L: KeyboardLayout> KeyboardDriver for PS2Keyboard<S, L> {
+    fn read(&mut self) -> Option<char> {
+        let scancode = self.controller.read_data();
+
+        if let Ok(Some(keycode)) = self.scan_key(scancode) {
+            if let Some(key) = self.scan_char(keycode) { return Some(key) }
+        }
+        None
+    }
+
+    fn key(&mut self) -> Option<Key> { 
+        let scancode = self.controller.read_data();
+
+        if let Ok(Some(key_code)) = self.scan_key(scancode) { return Some(key_code.key) }
+        None
+    }
+}
