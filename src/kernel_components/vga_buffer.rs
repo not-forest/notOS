@@ -249,11 +249,11 @@ macro_rules! debug {
     () => ();
     ($fmt:expr) => (
        #[cfg(debug_assertions)]
-        $crate::println!($crate::Color::LIGHTCYAN; concat!("DEBUG: " ,$fmt, '\n'))
+        $crate::println!($crate::Color::LIGHTCYAN; concat!("DEBUG: " ,$fmt))
     );
     ($fmt:expr, $($arg:tt)*) => (
         #[cfg(debug_assertions)]
-        $crate::println!($crate::Color::LIGHTCYAN; concat!("DEBUG: ", $fmt, '\n'), $($arg)*)
+        $crate::println!($crate::Color::LIGHTCYAN; concat!("DEBUG: ", $fmt), $($arg)*)
     );
 }
 
