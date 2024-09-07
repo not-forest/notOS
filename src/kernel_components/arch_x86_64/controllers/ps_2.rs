@@ -26,6 +26,7 @@ use crate::bitflags;
 /// 
 /// The PS/2 controller accepts commands and performs them. These commands are not the same
 /// that are sent to a PS/2 device. More info can be found in 'CRFlags'.
+#[derive(Debug, Clone, Copy)]
 pub struct PS2 {
     /// Holds the information about the pressed key.
     data_port: GenericPort<u8>,
