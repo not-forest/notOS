@@ -148,9 +148,10 @@ pub mod software {
     use core::any::Any;
 
     use crate::kernel_components::arch_x86_64::interrupts::interrupt;
+    use crate::kernel_components::drivers::DRIVER_MANAGER;
     use crate::kernel_components::memory::EntryFlags;
     use crate::kernel_components::task_virtualization::{Thread, Scheduler, PROCESS_MANAGEMENT_UNIT, PRIORITY_SCHEDULER, ROUND_ROBIN, ThreadState};
-    use crate::{println, print, debug, Color, critical_section};
+    use crate::{critical_section, debug, print, println, warn, Color};
     use crate::kernel_components::arch_x86_64::controllers::{
         PROGRAMMABLE_INTERRUPT_CONTROLLER,
         PS2,
@@ -336,18 +337,18 @@ pub mod software {
     /// controlls with other aplications in some queue style.
     #[no_mangle]
     unsafe extern "x86-interrupt" fn keyboard_interrupt_handler(stack_frame: InterruptStackFrame) {
-        use crate::kernel_components::drivers::keyboards::PS2_KEYBOARD;
         use crate::kernel_components::arch_x86_64::interrupts;
-
-        let scancode = PS2::new().read_data();
+        use crate::kernel_components::drivers::{DriverType, keyboards::KeyboardDriver};
         
         critical_section!(|| {
-            let mut keyboard = PS2_KEYBOARD.lock();
-
-            if let Ok(Some(keycode)) = keyboard.scan_key(scancode) {
-                if let Some(key) = keyboard.scan_char(keycode) {
+            if let Some(keyboard) = unsafe{DRIVER_MANAGER.driver::<Box<dyn KeyboardDriver>>(DriverType::Keyboard)} {
+                if let Some(key) = keyboard.read() {
                     print!("{}", key);
                 }
+            } else {
+                warn!("Keyboard input detected, yet ignored due to no available keyboard driver found.");
+                // This allows PIC to send more keyboard interrupts.
+                let _ = PS2::new().read_data();
             }
         });
         PROGRAMMABLE_INTERRUPT_CONTROLLER.lock().master.end_of_interrupt();
