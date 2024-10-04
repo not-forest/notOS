@@ -170,6 +170,11 @@ pub mod kernel_components {
             /// Defines an Interrupt Descriptor Table structure and it's methods.
             pub mod interrupt_descriptor_table;
 
+            /// A set of predefines exceptions.
+            pub mod def_exceptions;
+            /// A set of predefines interrupts.
+            pub mod def_interrupts; 
+
             pub use handler_functions::HandlerFn;
             pub use interrupt_descriptor_table::{GateDescriptor, IDT, GateType, INTERRUPT_DESCRIPTOR_TABLE};
             pub use interrupt::{
