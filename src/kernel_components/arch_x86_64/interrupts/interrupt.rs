@@ -510,9 +510,7 @@ pub unsafe fn cause_interrupt_unsafe(vector_num: u8) {
 macro_rules! critical_section {
     ($fn:expr) => {
         unsafe {
-            $crate::kernel_components::arch_x86_64::interrupts::with_int_disabled(|| {
-                $fn()
-            })
+            $crate::kernel_components::arch_x86_64::interrupts::with_int_disabled(|| $fn())
         }
     };
 }
