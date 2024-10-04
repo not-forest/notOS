@@ -11,14 +11,15 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use alloc::sync::Arc;
 
-use crate::critical_section;
+use crate::{critical_section, print};
 use crate::kernel_components::arch_x86_64::interrupts::interrupt;
 use crate::kernel_components::drivers::timers::{ClockDriver, RealTimeClock};
 use crate::kernel_components::drivers::{DriverType, DRIVER_MANAGER};
 use crate::kernel_components::memory::stack_allocator::Stack;
 use crate::kernel_components::arch_x86_64::{
-    controllers::PROGRAMMABLE_INTERRUPT_CONTROLLER, interrupts::{self, handler_functions::software::task_switch_call},
+    controllers::PROGRAMMABLE_INTERRUPT_CONTROLLER, interrupts,
 };
+use crate::kernel_components::task_virtualization::{Scheduler, ROUND_ROBIN};
 use super::{Process, join_handle::{JoinHandle, HandleStack, WriterReference}, PROCESS_MANAGEMENT_UNIT};
 
 /// A custom trait for thread functions.
@@ -40,15 +41,18 @@ impl<F: Fn(&mut Thread) -> Box<dyn Any> + Send + 'static> ThreadFn for F {}
 /// All the states in which thread can be. Threads may behave differently
 /// based on the current state. The state of the process may also change due to 
 /// inner threads.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ThreadState {
-    // Initiated, yet never ran. This thread's function must be called for the
-    // first time.
+    /// Initiated, yet never ran. This thread's function must be called for the first time.
     INIT,
     // Things that are usually happen most of the time.
-    //
+
     /// The thread is currently doing some tasks.
     RUNNING,
+    /// Some thread (or the thread itself) marked the thread to be halted in the next cycle. 
+    PREHALT(u8),
+    /// The thread is halted until the specified interrupt occurs.
+    HALT(u8),
     /// Some other thread made a request to close the current thread. This
     /// behavior can be ignored with PREFINALIGNORE flag.
     PREFINAL,
@@ -56,8 +60,8 @@ pub enum ThreadState {
     /// that want to communicate with a thread, that is already exited.
     FINAL,
 
-    // Things that are better not happen a lot.
-    // 
+    // Things, which are better not happen a lot.
+
     /// The thread has panicked. This will cause the whole process to panic. 
     PANICKED,
     /// This flag ignores the PREFINAL flag. With it, the thread can only exit manually.
@@ -212,6 +216,49 @@ impl<'a> Thread<'a> {
         HandleStack(v)
     }
 
+
+    /// Marks the thread as PREFINAL, and yields.
+    ///
+    /// This will allow the scheduler to clear the thread from the process and make some space for
+    /// new allocations.
+    ///
+    /// # Note
+    ///
+    /// This function only ignores the PREFINALIGNORE flag, since the thread marks itself.
+    #[inline(never)]
+    pub fn exit(&mut self) {
+        // This is always safe as it is a request to ourselves.
+        unsafe { self._mark_state(ThreadState::PREFINAL) };
+        Thread::r#yield();
+    }
+
+    /// Halts the thread until certain condition is met.
+    ///
+    /// It will mark the thread as halted and yield the execution. The thread will be
+    /// automatically unhalted, after the end of desired interrupt.
+    #[inline(always)]
+    pub fn halt(&mut self, isr: u8) {
+        // This is always safe as it is a halt request.
+        unsafe { self._mark_state(ThreadState::PREHALT(isr)) };
+        Thread::r#yield();
+    }
+
+    /// Spawns child thread that will only be active when interrupt specified by ISR occurs.
+    ///
+    /// The thread will run forever as long as the main thread lives, therefore it is useful to
+    /// call such interrupt threads from the main process. Such threads may stop themselves by
+    /// calling exit() function within the provided closure.
+    #[inline]
+    pub fn on_isr<F: 'static>(&mut self, isr: u8, f: F) where 
+        F: Fn(&mut Thread) + Send
+    {
+        self.spawn(move |t_isr| loop {
+            // Halting the thread until interrupt occurs.
+            Thread::halt(t_isr, isr);
+            f(t_isr);
+        });
+    }
+
     /// Sleeps for the provided amount of milliseconds.
     ///
     /// Until time is not passed, will yield to another thread to do something else. Uses the clock
@@ -246,5 +293,87 @@ impl<'a> Thread<'a> {
         } else {
             panic!("The thread yielded while interrupts are disabled.");
         }
+    }
+
+    /// Halts the thread until certain condition is met.
+    ///
+    /// It will mark the thread as halted and yield the execution. The thread will be
+    /// automatically unhalted, after the end of desired interrupt.
+    pub unsafe fn _halt(&mut self, isr: u8) {
+        self._mark_state(ThreadState::HALT(isr))
+    }
+
+    /// Marks the state as final.
+    ///
+    /// Used in task switching before deallocating the thread. This flag is also
+    /// written to the join handle. It means that the thread is done executing instruction
+    /// and exited normally.
+    pub unsafe fn _final(&mut self) {
+        self._mark_state(ThreadState::FINAL)
+    }
+
+    /// Marks the state as running.
+    ///
+    /// Must be used by task switching handler function, i.e clock interrupts.
+    pub unsafe fn _running(&mut self) {
+        self._mark_state(ThreadState::RUNNING)
+    }
+
+    /// Mutates thread's state together with it's join handle, if exist.
+    fn _mark_state(&mut self, s: ThreadState) {
+        self.thread_state = s.clone();
+        if let Some(o) = &mut self.output {
+            o.change_state(s.clone());
+        }
+    }
+}
+
+/// A helper function for calling the new thread, with fast-call calling convention
+///
+/// This function calls the inner function of the thread and passes the thread itself
+/// as a mutable reference argument. This function must be divergent, because we are never
+/// calling it ourselves but only jumping to it's address.
+///
+/// The task switching interrupt must jump to this function with current thread's reference pushed
+/// onto the stack.
+pub(crate) unsafe fn task_switch_call(t: &mut Thread) -> ! {
+    use crate::kernel_components::task_virtualization::{PriorityScheduler, Task, JoinHandle};
+    use core::mem;
+
+    let closure = t.fun.as_ref();
+
+    // Running the closure of the thread.
+    let output = closure(
+        mem::transmute(
+            t as *const _ as usize
+        )
+    );
+
+    critical_section!(|| {
+        // Marking the thread as done executing.
+        t.thread_state = ThreadState::FINAL;
+
+        // Writing the data to handle and removing the writer.
+        if let Some(o) = &mut t.output {
+            // Writing data
+            o.write(output);
+            // Changing the status
+            o.change_state(ThreadState::FINAL);
+            // Dropping the writer reference and living None on it's place.
+            drop(t.output.take());
+        }
+
+        // The PC will get here once the task is done. At this moment the task is
+        // not needed anymore and can be removed.
+        ROUND_ROBIN.delete(
+            Task { pid: t.pid, tid: t.tid }
+        );
+
+        // Trying to cleanup the process.
+        PROCESS_MANAGEMENT_UNIT.remove(t.pid);
+    });
+
+    loop {
+        interrupt::wait_for_interrupt();
     }
 }
