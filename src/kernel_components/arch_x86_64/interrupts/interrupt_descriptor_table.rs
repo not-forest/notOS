@@ -3,18 +3,16 @@ use crate::kernel_components::structures::IternumTrait;
 
 use crate::kernel_components::sync::Mutex;
 use crate::kernel_components::registers::segment_regs::{Segment, CodeSegment};
+use crate::{bitflags, single, VirtualAddress};
 use crate::kernel_components::arch_x86_64::{
     segmentation::SegmentSelector,
     PrivilegeLevel,
     DTPointer,
     descriptor_table::{lidt, sidt},
 };
-use crate::{bitflags, single, VirtualAddress};
-use super::InterruptVector;
-use super::{
-    handler_functions::predefined::*,
-    HandlerFn,
-};
+
+use super::{InterruptVector, HandlerFn};
+
 use core::marker::PhantomData;
 use core::ops::Index;
 use core::mem;
@@ -42,6 +40,7 @@ single! {
 #[repr(C, align(16))]
 pub struct IDT {
     table: [GateDescriptor; 256],
+    ints: [bool; 256],
 }
 
 impl IDT {
@@ -54,7 +53,10 @@ impl IDT {
     /// Because of that, the length is zero after the initialization.
     #[inline]
     pub fn new_empty() -> Self {
-        Self { table: [GateDescriptor::EMPTY; 256] }
+        Self { 
+            table: [GateDescriptor::EMPTY; 256], 
+            ints: [false; 256],
+        }
     }
     
     /// Pushes the value of a new gate to the table.
@@ -105,6 +107,18 @@ impl IDT {
     /// Returns the address of the IDT structure.
     pub fn addr(&'static self) -> usize {
         self as *const IDT as usize
+    }
+
+    /// Allows to set/unset and read isr flags.
+    ///
+    /// Handler functions set their corresponding isr number when called. Only handler functions
+    /// must mutate the IDT ints boolean array, however any part of OS can easily read from this
+    /// function.
+    #[inline(always)]
+    pub unsafe fn with_int<F, D>(&mut self, isr: u8, f: F) -> D where
+        F: FnOnce(&mut bool) -> D
+    {
+        f(&mut self.ints[isr as usize])
     }
 }
 
