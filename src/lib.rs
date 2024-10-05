@@ -41,12 +41,17 @@
 /// Alloc crate for convenient allocations.
 extern crate alloc;
 
+/// OS compatible static programs.
+pub mod programs;
+
 /// Main library entry point.
 pub mod kernel_components {
     /// I/O operation on VGA buffer (Basic TUI)
     pub mod vga_buffer;
     /// OS specific helper types.
     pub mod os;
+    /// Defines keyboard readonly interface for user-space programs to use. 
+    pub mod keyboard_interface;
 
     /// Custom data structures and types for operating on OS resources.
     ///
