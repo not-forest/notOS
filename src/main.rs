@@ -53,8 +53,8 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
     };
 
     use notOS::kernel_components::arch_x86_64::interrupts::{
-        handler_functions::predefined::*,
-        handler_functions::software::*,
+        def_exceptions::*,
+        def_interrupts::*,
         INTERRUPT_DESCRIPTOR_TABLE,
         InterruptVector, 
         GateDescriptor,
@@ -155,7 +155,7 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
         let stack1 = MEMORY_MANAGEMENT_UNIT.allocate_stack(16).unwrap();
 
         // Using library shell program.
-        let shell = Process::new_void(stack1, 0, 1, 1, None, |_| {loop{}});
+        let shell = Process::new_void(stack1, 0, 1, 1, None, notOS::programs::shell);
 
         // Pushing the process to the queue.
         PROCESS_MANAGEMENT_UNIT.queue(shell);
