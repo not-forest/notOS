@@ -58,25 +58,9 @@ pub struct MMU {
 /// Note that it does not have a proper multiboot structure pointer, and must be initialized with
 /// init() method.
 single! {
-    pub mut MEMORY_MANAGEMENT_UNIT: MMU = unsafe { MMU::new() };
-}
-
-impl MMU {
-
-    /// Creates a new instance of MMU without the pointer.
-    /// 
-    /// This function does not remap the kernel and only creates an instance of this unit.
-    #[inline]
-    pub fn new() -> Self {
-        use crate::kernel_components::memory::{
-            self, 
-            allocators::GLOBAL_ALLOCATOR,
-            EntryFlags,
-        };
-
-        unsafe {
+    pub mut MEMORY_MANAGEMENT_UNIT: MMU = unsafe {
             #[allow(invalid_value)]
-            Self {
+            MMU {
                 info_pointer: MaybeUninit::uninit().assume_init(),
                 active_table: None,
                 
@@ -87,8 +71,9 @@ impl MMU {
                 is_mem_init: AtomicBool::new(false),
             }
         }
-    }
+}
 
+impl MMU {
     /// Creates a new instance of MMU with given info pointer.
     /// 
     /// Provide the info pointer to _start() function the kernel. This function
