@@ -10,15 +10,14 @@ pub mod shell {
 
     /// Small shell program that allows to write commands and receive output. 
     ///
-    /// It uses keyboard interface to 
+    /// Keyboard interface is being used to communicate with kernel and read data obtained from
+    /// user's keyboard.
     pub fn shell(t: &mut Thread) {
-        use crate::kernel_components::structures::thread_safe::ConcurrentQueue;
-
         // Creating a keyboard interface to communicate with kernel buffer.
-        let k_interface = KeyboardInterface::new();
+        let mut k_interface = KeyboardInterface::new();
 
         // Providing one of the handlers for click event.
-        k_interface.on_click(t, |_, str| print!("{}", str.unwrap_or("")));
+        k_interface.on_click(t, |_, c| c.map(|c| print!("{}", c)));
 
         loop {}
     }
