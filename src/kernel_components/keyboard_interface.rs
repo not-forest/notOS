@@ -4,7 +4,8 @@
 use crate::kernel_components::sync::Mutex;
 use crate::single;
 use core::{
-    ops::{Deref, DerefMut}, sync::atomic::{AtomicU8, Ordering}
+    ops::{Deref, DerefMut}, 
+    sync::atomic::{AtomicU8, Ordering}
 };
 
 use super::{arch_x86_64::{controllers::PROGRAMMABLE_INTERRUPT_CONTROLLER, interrupts::INTERRUPT_DESCRIPTOR_TABLE}, task_virtualization::{Thread, ThreadState}};
@@ -43,8 +44,8 @@ impl KeyboardInterface {
     /// The provided function will be called each time the keyboard interrupt is made. The current
     /// thread must be provided in order to spawn a new one, with the function it is going to
     /// execute.
-    pub fn on_click<F: 'static>(self, t: &mut Thread, f: F) where
-        F: Fn(&mut Thread, Option<&str>) + Send
+    pub fn on_click<F: 'static, D: 'static>(&mut self, t: &mut Thread, f: F) where
+        F: Fn(&mut Thread, Option<&char>) -> D + Send
     {
         // TODO! change when APIC will be implemented.
         let isr = unsafe { &PROGRAMMABLE_INTERRUPT_CONTROLLER }
@@ -52,14 +53,14 @@ impl KeyboardInterface {
             .get_master_offset()
             + 1;
 
+        let iface = self.clone();
         t.spawn(move |t| {
-            let mut iface = self.clone();
+            let mut iface = iface.clone();
 
             loop {
                 Thread::halt(t, isr);
                 let buf = unsafe { OS_CHAR_BUFFER.deref() }.lock();
-                let c = buf.readline(&mut iface);
-                f(t, c);
+                f(t, buf.read(&mut iface));
             }
         });
     }
@@ -87,20 +88,19 @@ impl OSCharBuffer {
     ///
     /// This must only be used by the keyboard interrupt handler that appends a character obtained
     /// from the keyboard driver.
+    #[inline]
     pub unsafe fn append(&mut self, c: char) {
         self.buf[self.keyboard_ptr.fetch_add(1, Ordering::SeqCst) as usize] = c;
     }
 
-    pub fn readline(&self, inface: &mut KeyboardInterface) -> Option<&str> {
-        let ptr = self.keyboard_ptr.load(Ordering::Acquire); 
-        let slice = unsafe {
-            let slice = core::slice::from_raw_parts(
-                self.buf[inface.0 as usize .. ptr as usize].as_ptr().cast::<u8>(), 
-                ptr.abs_diff(inface.0) as usize
-            );
-            core::str::from_utf8_unchecked(slice)
-        };
-        inface.0 = ptr;
-        Some(slice)
+    /// Reads new lines from the buffer as a single character.
+    #[inline]
+    pub fn read(&self, inface: &mut KeyboardInterface) -> Option<&char> {
+        let ptr = self.keyboard_ptr.load(Ordering::Acquire);
+        if inface.0 != ptr {
+            let c = &self.buf[inface.0 as usize];
+            inface.0 = ptr;
+            Some(c)
+        } else { None }
     }
 }
