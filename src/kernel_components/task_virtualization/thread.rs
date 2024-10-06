@@ -229,7 +229,7 @@ impl<'a> Thread<'a> {
     pub fn exit(&mut self) {
         // This is always safe as it is a request to ourselves.
         unsafe { self._mark_state(ThreadState::PREFINAL) };
-        Thread::r#yield();
+        loop {} // die.
     }
 
     /// Halts the thread until certain condition is met.
@@ -240,7 +240,8 @@ impl<'a> Thread<'a> {
     pub fn halt(&mut self, isr: u8) {
         // This is always safe as it is a halt request.
         unsafe { self._mark_state(ThreadState::PREHALT(isr)) };
-        Thread::r#yield();
+
+        while !self.is_running() { Thread::r#yield() }
     }
 
     /// Spawns child thread that will only be active when interrupt specified by ISR occurs.
@@ -257,6 +258,11 @@ impl<'a> Thread<'a> {
             Thread::halt(t_isr, isr);
             f(t_isr);
         });
+    }
+
+    /// Returns true if thread's status is running.
+    pub fn is_running(&self) -> bool {
+        self.thread_state == ThreadState::RUNNING
     }
 
     /// Sleeps for the provided amount of milliseconds.
