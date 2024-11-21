@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 #![allow(non_snake_case, static_mut_refs)]
-#![feature(custom_test_frameworks, used_with_arg, abi_x86_interrupt, asm_const)]
+#![feature(custom_test_frameworks, used_with_arg, abi_x86_interrupt)]
 #![test_runner(notOS::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
