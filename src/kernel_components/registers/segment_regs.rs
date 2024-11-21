@@ -197,10 +197,10 @@ unsafe impl Segment for CodeSegment {
         unsafe {
             asm!(
                 "push {selector}",
-                "lea {tmp}, [1f + rip]",
+                "lea {tmp}, [2f + rip]",
                 "push {tmp}",
                 "retfq",
-                "1:",
+                "2:",
                 selector = in(reg) u64::from(selector.0),
                 tmp = lateout(reg) _,
                 options(preserves_flags),
