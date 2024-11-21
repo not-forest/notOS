@@ -568,7 +568,7 @@ impl<'a> InfoPointer<'a> {
         }
 
         let slice_size = mbi.total as usize - size_of::<BootInfoHeader>();
-        let mbi = &*core::ptr::from_raw_parts::<BootInfo>(ptr.cast(), slice_size);
+        let mbi = &*core::ptr::from_raw_parts::<BootInfo>(ptr, slice_size);
         
         if !mbi.end_tag_check() {
             return Err(MbiLoadError::NoEndTag);

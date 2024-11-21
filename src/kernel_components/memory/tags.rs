@@ -67,7 +67,7 @@ pub trait TagTrait: Pointee {
     // Returns a ref to a dynamically sized tag.
     unsafe fn from_base_tag<'a>(tag: &Tag) -> &'a Self {
         let ptr = core::ptr::addr_of!(*tag);
-        let ptr = core::ptr::from_raw_parts(ptr.cast(), Self::dst_size(tag));
+        let ptr = core::ptr::from_raw_parts(ptr, Self::dst_size(tag));
         &*ptr
     }}
 
