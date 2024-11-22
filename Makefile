@@ -51,7 +51,7 @@ $(KERNEL): $(ASSEMBLY_OBJECT_FILES)
 
 
 build_kernel:
-	@RUST_TARGET_PATH=$(CURDIR) xargo build $(CARGO_FLAGS)
+	@RUST_TARGET_PATH=$(CURDIR) cargo build $(CARGO_FLAGS)
 
 
 # Release section
@@ -72,7 +72,7 @@ $(RELEASE_ISO): $(RELEASE) build_release $(GRUB_CFG)
 	@rm -rf build/isofiles
 
 build_release:
-	@RUST_TARGET_PATH=$(CURDIR) xargo build --release $(CARGO_FLAGS)
+	@RUST_TARGET_PATH=$(CURDIR) cargo build --release $(CARGO_FLAGS)
 
 
 #Tests
