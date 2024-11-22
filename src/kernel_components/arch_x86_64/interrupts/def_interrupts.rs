@@ -155,7 +155,7 @@ unsafe extern "x86-interrupt" fn timer_interrupt_handler(mut stack_frame: Interr
         "cmp {0:r}, 0x0",    // If the thread must obtain some inputs, do:
         "cmovne rdi, {0:r}", // This line only changes the behavior.
         
-        "add rsp, 0xa0",
+        "add rsp, 0x90",
         "pop rax",
         "pop rcx",
         "pop rdx",
