@@ -26,7 +26,7 @@ use alloc::boxed::Box;
 /// This is the main binary (kernel) space. As the library will build in, ew features will be added further.
 use notOS::{
     kernel_components::{
-        arch_x86_64::interrupts, drivers::{keyboards::{KeyboardDriver, PS2Keyboard}, timers::ClockDriver}, memory::MEMORY_MANAGEMENT_UNIT, registers::{control, ms}
+        arch_x86_64::{controllers::pic::ChainedPics, interrupts}, drivers::{keyboards::{KeyboardDriver, PS2Keyboard}, timers::ClockDriver}, memory::MEMORY_MANAGEMENT_UNIT, registers::{control, ms}
     }, print, println, single, warn, BUDDY_ALLOC, FREE_LIST_ALLOC, GLOBAL_ALLOCATOR
 };
 
@@ -139,7 +139,10 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
         INTERRUPT_DESCRIPTOR_TABLE.load_table();
 
         // Remapping the PIC controller.
-        PROGRAMMABLE_INTERRUPT_CONTROLLER.lock().reinit_chained(32).remap();
+        let mut pics = ChainedPics::new_contiguous(32);
+        pics.initialize();
+
+        PROGRAMMABLE_INTERRUPT_CONTROLLER.lock().replace(pics);
    
         // Loading drivers
         {
