@@ -50,8 +50,9 @@ impl KeyboardInterface {
         // TODO! change when APIC will be implemented.
         let isr = unsafe { &PROGRAMMABLE_INTERRUPT_CONTROLLER }
             .lock()
-            .get_master_offset()
-            + 1;
+            .as_mut()
+            .map(|pic| pic.master.offset + 1)
+            .unwrap_or(0);
 
         let iface = self.clone();
         t.spawn(move |t| {
