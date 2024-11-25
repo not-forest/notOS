@@ -144,7 +144,11 @@ unsafe extern "x86-interrupt" fn timer_interrupt_handler(mut stack_frame: Interr
         }
     });
 
-    PROGRAMMABLE_INTERRUPT_CONTROLLER.lock().master.end_of_interrupt();
+    PROGRAMMABLE_INTERRUPT_CONTROLLER.lock()
+        .as_mut()
+        .map(|pic| 
+            pic.master.end_of_interrupt()
+        );
 
     // Before the iretq instruction is done, we must change the rdi, so it can be used as
     // a pointer parameter for a thread function. Because the calling convention automatically
@@ -193,7 +197,11 @@ unsafe extern "x86-interrupt" fn keyboard_interrupt_handler(stack_frame: Interru
             let _ = PS2::new().read_data();
         }
     });
-    PROGRAMMABLE_INTERRUPT_CONTROLLER.lock().master.end_of_interrupt();
+    PROGRAMMABLE_INTERRUPT_CONTROLLER.lock()
+        .as_mut()
+        .map(|pic| 
+            pic.master.end_of_interrupt()
+        );
 }
 
 /// A timer interrupt handler.
