@@ -294,7 +294,12 @@ impl<'a> Thread<'a> {
     #[inline(never)]
     pub fn r#yield() {
         if interrupt::is_interrupts_enabled() {
-            let timer_interrupt_int = PROGRAMMABLE_INTERRUPT_CONTROLLER.lock().get_master_offset();
+            let timer_interrupt_int = PROGRAMMABLE_INTERRUPT_CONTROLLER
+                .lock()
+                .as_mut()
+                .map(|pic| pic.master.offset)
+                .expect("PIC must be initialized for this function.");
+            
             interrupt::cause_interrupt(timer_interrupt_int);
         } else {
             panic!("The thread yielded while interrupts are disabled.");
