@@ -1,4 +1,7 @@
 # The main building area
+#
+# Prerequisites:
+# 	nasm (bootloader part), grub2/grub -tools, xorriso, qemu-system-x86_64, gdb, cargo, rust (nigthly), python
 ARCH := x86_64
 
 KERNEL := target/$(ARCH)-notOS/debug/notOS
@@ -15,81 +18,82 @@ GDB_PORT := 1234
 ASSEMBLY_SOURCE_FILES := $(wildcard src/arch/$(ARCH)/*.asm)
 ASSEMBLY_OBJECT_FILES := $(patsubst src/arch/$(ARCH)/%.asm, build/arch/$(ARCH)/%.o, $(ASSEMBLY_SOURCE_FILES))
 
+AR ?= ar
+NASM ?= nasm
+GRUB_MKRESCUE ?= grub2-mkrescue
+QEMU ?= qemu-system-x86_64
+GDB ?= gdb
+CARGO ?= cargo
+PYTHON ?= python3
+
 .PHONY: all clean run release test iso
 
 all: $(KERNEL)
 
 stop:
-	@kill $$(pgrep -x qemu-system-x86)
+	kill $$(pgrep -x $(QEMU))
 
 clean:
-	@rm -rf build
+	rm -rf build
 
 # Compile assembly files
 build/arch/$(ARCH)/%.o: src/arch/$(ARCH)/%.asm
-	@mkdir -p $(dir $@)
-	@nasm -felf64 $< -o $@
+	mkdir -p $(dir $@)
+	$(NASM) -felf64 $< -o $@
 
 # Debugging section
 run: $(ISO)
-	@qemu-system-x86_64 -cdrom $(ISO) -m 20M -s -S -no-reboot -no-shutdown & 
-	@echo "Waiting for QEMU to start..."
-	@sleep 2
-	@gdb -ex "target remote :$(GDB_PORT)" -ex "symbol-file $(KERNEL)" -ex "layout asm"
+	$(QEMU) -cdrom $(ISO) -m 20M -s -S -no-reboot -no-shutdown & \
+	echo "Waiting for QEMU to start..."
+	$(GDB) -ex "target remote :$(GDB_PORT)" -ex "symbol-file $(KERNEL)" -ex "layout asm"
 
 iso: $(ISO)
 
 $(ISO): $(KERNEL) build_kernel $(GRUB_CFG)
-	@mkdir -p build/isofiles/boot/grub
-	@cp $(KERNEL) build/isofiles/boot/kernel.bin
-	@cp $(GRUB_CFG) build/isofiles/boot/grub
-	@grub-mkrescue --verbose -o $(ISO) build/isofiles 2> /dev/null
-	@rm -rf build/isofiles
+	mkdir -p build/isofiles/boot/grub
+	cp $(KERNEL) build/isofiles/boot/kernel.bin
+	cp $(GRUB_CFG) build/isofiles/boot/grub
+	$(GRUB_MKRESCUE) --verbose -o $(ISO) build/isofiles
+	rm -rf build/isofiles
 
 $(KERNEL): $(ASSEMBLY_OBJECT_FILES)
-	@ar crus build/libbootloader.a $(ASSEMBLY_OBJECT_FILES)
-
+	$(AR) crus build/libbootloader.a $(ASSEMBLY_OBJECT_FILES)
 
 build_kernel:
-	@RUST_TARGET_PATH=$(CURDIR) cargo build $(CARGO_FLAGS)
-
+	RUST_TARGET_PATH=$(CURDIR) $(CARGO) build $(CARGO_FLAGS)
 
 # Release section
 release: $(RELEASE_ISO)
-	@qemu-system-x86_64 -cdrom $(RELEASE_ISO) -m 10M -s -S -no-reboot -no-shutdown & 
-	@echo "Waiting for QEMU to start..."
-	@sleep 2
-	@gdb -ex "target remote :$(GDB_PORT)" -ex "symbol-file $(RELEASE)" -ex "layout asm"
+	$(QEMU) -cdrom $(RELEASE_ISO) -m 10M -s -S -no-reboot -no-shutdown & \
+	echo "Waiting for QEMU to start..."
+	$(GDB) -ex "target remote :$(GDB_PORT)" -ex "symbol-file $(RELEASE)" -ex "layout src"
 
 $(RELEASE): $(ASSEMBLY_OBJECT_FILES)
-	@ar crus build/libbootloader.a $(ASSEMBLY_OBJECT_FILES)
+	$(AR) crus build/libbootloader.a $(ASSEMBLY_OBJECT_FILES)
 
 $(RELEASE_ISO): $(RELEASE) build_release $(GRUB_CFG)
-	@mkdir -p build/isofiles/boot/grub
-	@cp $(RELEASE) build/isofiles/boot/kernel.bin
-	@cp $(GRUB_CFG) build/isofiles/boot/grub
-	@grub-mkrescue --verbose -o $(RELEASE_ISO) build/isofiles 2> /dev/null
-	@rm -rf build/isofiles
+	mkdir -p build/isofiles/boot/grub
+	cp $(RELEASE) build/isofiles/boot/kernel.bin
+	cp $(GRUB_CFG) build/isofiles/boot/grub
+	$(GRUB_MKRESCUE) --verbose -o $(RELEASE_ISO) build/isofiles 2> /dev/null
+	rm -rf build/isofiles
 
 build_release:
-	@RUST_TARGET_PATH=$(CURDIR) cargo build --release $(CARGO_FLAGS)
+	RUST_TARGET_PATH=$(CURDIR) $(CARGO) build --release $(CARGO_FLAGS)
 
-
-#Tests
+# Tests
 test: $(TEST_ISO)
-	@qemu-system-x86_64 -cdrom $(TEST_ISO) -m 20M -s -S -no-reboot -no-shutdown & 
-	@echo "Waiting for QEMU to start..."
-	@sleep 2
-	@gdb -ex "target remote :$(GDB_PORT)" -ex "symbol-file $(TEST_KERNEL)" -ex "layout asm"
+	$(QEMU) -cdrom $(TEST_ISO) -m 20M -s -S -no-reboot -no-shutdown & \
+	echo "Waiting for QEMU to start..."
+	$(GDB) -ex "target remote :$(GDB_PORT)" -ex "symbol-file $(TEST_KERNEL)" -ex "layout src"
 
 $(TEST_ISO): $(KERNEL) test_build $(GRUB_CFG)
-	@mkdir -p build/tests/isofiles/boot/grub
-	@cp $(TEST_KERNEL) build/tests/isofiles/boot/kernel.bin
-	@cp $(GRUB_CFG) build/tests/isofiles/boot/grub
-	@grub-mkrescue --verbose -o $(TEST_ISO) build/tests/isofiles 2> /dev/null
-	@rm -rf build/tests/isofiles
+	mkdir -p build/tests/isofiles/boot/grub
+	cp $(TEST_KERNEL) build/tests/isofiles/boot/kernel.bin
+	cp $(GRUB_CFG) build/tests/isofiles/boot/grub
+	$(GRUB_MKRESCUE) --verbose -o $(TEST_ISO) build/tests/isofiles 2> /dev/null
+	rm -rf build/tests/isofiles
 
 test_build:
-	@RUST_TARGET_PATH=$(CURDIR) cargo test --no-run --message-format=json > latest_test.json
-	@python3 extract.py
-
+	RUST_TARGET_PATH=$(CURDIR) $(CARGO) test --no-run --message-format=json > latest_test.json
+	$(PYTHON) extract.py
