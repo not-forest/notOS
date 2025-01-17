@@ -2,11 +2,11 @@
 /// A module that represents a Keyboard trait and all it's needed components.
 
 use super::{
+    super::Driver,
     PS2Keyboard, ScancodeSet1,
     layouts::US104KEY,
 };
-use crate::kernel_components::drivers::Driver;
-use crate::kernel_components::sync::Mutex;
+use crate::kernel_components::{os::OSChar, sync::Mutex};
 use alloc::boxed::Box;
 use crate::single;
 
@@ -15,21 +15,13 @@ use crate::single;
 /// Via this driver all system utilities, which expect user keyboard input can read obtain their
 /// data.
 pub trait KeyboardDriver {
-    /// Read the character from the keyboard input.
-    ///
-    /// This function MUST always return the last pressed key from the keyboard. Driver should not
-    /// implement any buffer logic for pressed keys, because this is not a function used by user
-    /// space programs, but only for system utilities. If no user input found, this should always 
-    /// return None.
-    fn read(&mut self) -> Option<char>;
-
     /// Reads the pressed key.
     ///
     /// This function MUST always return the last pressed key from the keyboard. Driver should not
     /// implement any buffer logic for pressed keys, because this is not a function used by user
     /// space programs, but only for system utilities. If no user input found, this should always 
     /// return None.
-    fn key(&mut self) -> Option<Key>;
+    fn read(&mut self) -> Option<OSChar>;
 }
 
 impl_driver!(Box<dyn KeyboardDriver>);

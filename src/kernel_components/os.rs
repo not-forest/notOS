@@ -3,7 +3,30 @@
 //! All data types within this structure are used only for better readibility
 //! and debugging. They dont have specific purpose, and because of that, defined there.
 
-use core::fmt::{Display, Debug};
+use core::{fmt::{Debug, Display}, mem::MaybeUninit};
+use super::drivers::keyboards::KeyCode;
+
+/// Special structure for representing currenty pressed keyboard key.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct OSChar {
+    pub chr: Option<char>,
+    pub key: KeyCode
+}
+
+impl OSChar {
+    /// Initializes a new OSChar structure.
+    pub const fn new(chr: Option<char>, key: KeyCode) -> Self {
+        Self { chr, key }
+    }
+
+    /// Initializes zeroed OSChar for buffer filling.
+    pub const fn zeroed() -> Self {
+        Self { 
+            chr: None,
+            key: unsafe { MaybeUninit::zeroed().assume_init() },
+        }
+    }
+}
 
 /// Special os type for unsigned character type, which is compatible with 'u_char'
 /// representation in standart C library.

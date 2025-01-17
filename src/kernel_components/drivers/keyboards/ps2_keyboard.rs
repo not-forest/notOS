@@ -1,6 +1,6 @@
 /// A driver module for PS/2 Keyboard.
 
-use crate::{kernel_components::{arch_x86_64::controllers::PS2, drivers::Driver, sync::Mutex}, single};
+use crate::{kernel_components::{arch_x86_64::controllers::PS2, drivers::Driver, os::OSChar, sync::Mutex}, single};
 use super::{keyboard::KeyboardDriver, layouts::US104KEY, Key, KeyCode, KeyboardLayout, Modifiers, ScanCode, ScancodeError, ScancodeSet1, ScancodeSetTrait};
 use core::fmt::Debug;
 
@@ -85,19 +85,12 @@ impl Default for PS2Keyboard<ScancodeSet1, US104KEY> {
 }
 
 impl<S: ScancodeSetTrait + Debug + Clone + Copy, L: KeyboardLayout> KeyboardDriver for PS2Keyboard<S, L> {
-    fn read(&mut self) -> Option<char> {
+    fn read(&mut self) -> Option<OSChar> {
         let scancode = self.controller.read_data();
 
         if let Ok(Some(keycode)) = self.scan_key(scancode) {
-            if let Some(key) = self.scan_char(keycode) { return Some(key) }
+            return Some(OSChar::new(self.scan_char(keycode), keycode))
         }
-        None
-    }
-
-    fn key(&mut self) -> Option<Key> { 
-        let scancode = self.controller.read_data();
-
-        if let Ok(Some(key_code)) = self.scan_key(scancode) { return Some(key_code.key) }
         None
     }
 }

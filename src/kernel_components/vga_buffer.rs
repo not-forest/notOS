@@ -33,6 +33,25 @@ impl Logger {
     pub(self) fn write(&mut self, byte: u8) {
         match byte {
             b'\n' => self.new_line(),
+            b'\x7e' => {
+                if self.pos >= BUFFER_WIDTH {
+                    self.new_line()
+                }
+
+                let row: usize = BUFFER_HEIGHT - 1;
+                let col: usize = self.pos - 1;
+
+                if (col > BUFFER_WIDTH) {
+                    self.clear_row(row);
+                    self.pos = BUFFER_WIDTH;
+                }
+
+                self.buf.str[row][col] = Char {
+                    ascii_char: b' ',
+                    color_code: self.color_code,
+                };
+                self.pos -= 1;
+            }
             b'\x7f' => self.pos = 0,
             _ => {
                 if self.pos >= BUFFER_WIDTH {
