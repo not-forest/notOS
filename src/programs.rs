@@ -18,7 +18,7 @@ pub mod shell {
 
     fn shell_greetings() {
         println!(Color::GREEN; concat!("\n\n\n", 
-                                       "# Welcome to \"notOS\" shell.\n",
+                                       "# Welcome to \"notOS\" shell. [0.0.1.alpha]\n",
                                        "# This software is an internal part of notOS kernel.\n",
                                        "#\n",
                                        "# THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED", 
