@@ -301,8 +301,6 @@ impl<'a> Thread<'a> {
                 .expect("PIC must be initialized for this function.");
             
             interrupt::cause_interrupt(timer_interrupt_int);
-        } else {
-            panic!("The thread yielded while interrupts are disabled.");
         }
     }
 
