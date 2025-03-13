@@ -11,8 +11,7 @@
     "panic-strategy": "abort",
     "linker-flavor": "ld",
     "linker": "ld",
-    "rustc-abi": "x86-softfloat",
-    "features": "-mmx,-sse,+soft-float", 
+    "features": "-mmx,-sse,+soft-float",
     "linker-is-gnu": true,
     "archive-format": "gnu"
 }
