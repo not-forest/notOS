@@ -233,6 +233,10 @@ macro_rules! _inner_bitflags {
                 self.as_node().is_in(bits)
             }
             
+            pub fn is_empty(&self) -> bool {
+                self.bits() == 0
+            }
+            
             pub fn as_array() -> [Self; [$($name::$flag),*].len()] {
                 [$($name::$flag),*]
             }
@@ -244,6 +248,7 @@ macro_rules! _inner_bitflags {
             pub fn as_node(&self) -> crate::kernel_components::structures::BitNode<$underlying> {
                 crate::kernel_components::structures::BitNode((*self as $name).into())
             }
+
 
             const fn node_to_enum(value: crate::kernel_components::structures::BitNode<$underlying>) -> $name {
                 $name::Custom(value.0)
