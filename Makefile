@@ -20,11 +20,14 @@ ASSEMBLY_OBJECT_FILES := $(patsubst src/arch/$(ARCH)/%.asm, build/arch/$(ARCH)/%
 
 AR ?= ar
 NASM ?= nasm
-GRUB_MKRESCUE ?= grub2-mkrescue
+GRUB_MKRESCUE ?= grub-mkrescue
 QEMU ?= qemu-system-x86_64
 GDB ?= gdb
 CARGO ?= cargo
 PYTHON ?= python3
+
+QEMU_FLAGS := -m 20M -s -S -no-reboot -no-shutdown
+QEMU_FLAGS += -audio driver=pa,model=virtio,server=/run/user/1000/pulse/native,id=beeper -machine pcspk-audiodev=beeper
 
 .PHONY: all clean run release test iso
 
@@ -43,7 +46,7 @@ build/arch/$(ARCH)/%.o: src/arch/$(ARCH)/%.asm
 
 # Debugging section
 run: $(ISO)
-	$(QEMU) -cdrom $(ISO) -m 20M -s -S -no-reboot -no-shutdown & \
+	$(QEMU) -cdrom $(ISO) $(QEMU_FLAGS) & \
 	echo "Waiting for QEMU to start..."
 	$(GDB) -ex "target remote :$(GDB_PORT)" -ex "symbol-file $(KERNEL)" -ex "layout asm"
 
@@ -64,7 +67,7 @@ build_kernel:
 
 # Release section
 release: $(RELEASE_ISO)
-	$(QEMU) -cdrom $(RELEASE_ISO) -m 10M -s -S -no-reboot -no-shutdown & \
+	$(QEMU) -cdrom $(RELEASE_ISO) $(QEMU_FLAGS) & \
 	echo "Waiting for QEMU to start..."
 	$(GDB) -ex "target remote :$(GDB_PORT)" -ex "symbol-file $(RELEASE)" -ex "layout src"
 
