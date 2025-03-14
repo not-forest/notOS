@@ -158,10 +158,18 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
         let stack1 = MEMORY_MANAGEMENT_UNIT.allocate_stack(16).unwrap();
 
         // Using library shell program.
-        let shell = Process::new_void(stack1, 0, 1, 1, None, notOS::programs::shell);
+        let beep = Process::new_void(stack1, 0, 1, 1, None, |_t| {
+            use notOS::kernel_components::arch_x86_64::controllers::{PCBeeper, PIT};
+
+            let pit = PIT::new();
+            let mut beep = PCBeeper::new_with_pit(pit);
+
+            beep.play(100);
+            loop {}
+        });
 
         // Pushing the process to the queue.
-        PROCESS_MANAGEMENT_UNIT.queue(shell);
+        PROCESS_MANAGEMENT_UNIT.queue(beep);
     }
 
     loop {

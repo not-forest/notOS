@@ -208,11 +208,14 @@ pub mod kernel_components {
             pub mod apic;
             /// Defines command words for PIC controllers for easy management.
             pub mod pic_command_words;
+            /// Simple sound projection via PC Speaker element. Compatible on most x86 machines.
+            pub mod beeper;
 
             pub use pit::{PIT, PITReadbackCMD, PITReadback, PITCommand};
             pub use rtc::{RTC, CMOSAddr};
             pub use pic::{Pic, PROGRAMMABLE_INTERRUPT_CONTROLLER};
             pub use ps_2::{PS2, PSControllerCommand, PSControllerConfiguration};
+            pub use beeper::{PCBeeper, BeeperModeOfOperation};
         }
 
         /// Defines a minimal segmentation interface to jump into 64-bit Long Mode.
@@ -239,11 +242,13 @@ pub mod kernel_components {
         pub mod control;
         /// Defines MXSRC register. Associated with floating-point control and status for SIMD
         /// instructions.
-        pub mod mxscr;
+        pub(crate) mod mxscr;
         /// Defines CPU status register XFLAGS. 
-        pub mod flags;
+        pub(crate) mod flags;
         /// Defines Model Specific registers. 
         pub mod ms;
+        /// NMI Status and Control register.
+        pub(crate) mod nmi;
     }
 
     /// Custom module for driver interface.
