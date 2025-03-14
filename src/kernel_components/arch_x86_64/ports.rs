@@ -1,6 +1,7 @@
 /// A module for managing i/o port connections.
 
 use core::{arch::asm, marker::PhantomData};
+use super::post::DEBUG_BOARD;
 
 /// Privilege levels of the ports, that provide the ability to read, write and both.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -171,6 +172,7 @@ impl SipoPort<u8, u16> {
 
         unsafe {
             u8::write(self.port, value as u8);
+            DEBUG_BOARD.write(0);
             u8::write(self.port, (value >> 8) as u8);
         }
     }
