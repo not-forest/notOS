@@ -7,6 +7,9 @@ use crate::{
     }, println
 };
 
+/// Constant value of PIT frequency in Hz.
+pub const PIT_HZ: usize = 1193182;
+
 /// Programmable Interval Timer.
 ///
 /// Internal hardware timer that can be configured via this structure.
@@ -19,6 +22,7 @@ use crate::{
 /// - Channel 1: ABSOLETE channel, which was with DMA controller on older systems. Can be ignored.
 /// - Channel 2: The output from this channel is connected to the PC speaker, so it's frequency
 /// controls the frequency of the dound produced by the speaker.
+#[derive(Debug)]
 pub struct PIT {
     /// Timer signal on IRQ0 line.
     pub channel0: SipoPort<u8, u16>,
@@ -116,6 +120,23 @@ impl PIT {
             }
         }
         readback
+    }
+
+    /// Each channel is a 16-bit timer, which value can be changed with this function. The current
+    /// command configuration of the PIT timer won't be affected by this command.
+    ///
+    /// # Panics
+    ///
+    /// Will panic if the channel value is out of range.
+    pub fn override_timer(&mut self, channel: u8, val: u16) {
+        use PITCommand::*;
+        let ch = match channel {
+            // Sipo ports will ensure the proper writing order.
+            0 => { self.channel0.write(val) },
+            1 => { self.channel1.write(val) },
+            2 => { self.channel2.write(val) },
+            _ => panic!("PIT channel out of range: {}", channel),
+        };
     }
 
     /// Sends a raw command byte to the command port.
