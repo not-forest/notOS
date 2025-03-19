@@ -157,19 +157,13 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
         use notOS::kernel_components::task_virtualization::{Process, PROCESS_MANAGEMENT_UNIT};
         let stack1 = MEMORY_MANAGEMENT_UNIT.allocate_stack(16).unwrap();
 
-        // Using library shell program.
-        let beep = Process::new_void(stack1, 0, 1, 1, None, |_t| {
-            use notOS::kernel_components::arch_x86_64::controllers::{PCBeeper, PIT};
-
-            let pit = PIT::new();
-            let mut beep = PCBeeper::new_with_pit(pit);
-
-            beep.play(100);
-            loop {}
-        });
+        use notOS::kernel_components::arch_x86_64::acpi::acpi::{RSDT, MADT};
+        let rsdt = RSDT::new();
+        let madt = rsdt.find::<MADT>();
+        notOS::debug!("{:?}", madt);
 
         // Pushing the process to the queue.
-        PROCESS_MANAGEMENT_UNIT.queue(beep);
+/*         PROCESS_MANAGEMENT_UNIT.queue(beep); */
     }
 
     loop {

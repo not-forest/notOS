@@ -12,9 +12,11 @@ use crate::{
     kernel_components::os::UChar
 };
 
+/* Useful descriptor table reexport. */
 pub use super::{
     rsdt::{RSDT, XSDT},
     fadt::{FADT, PPMP},
+    madt::MADT,
 };
 
 /// Custom trait for all system description tables defined by ACPI specification.
@@ -57,6 +59,13 @@ pub trait SystemDescriptionTable {
         // All bytes in the structure must sum up to zero.
         slice.iter().fold(0u8, |s, b| s.wrapping_add(*b)) == 0
     }
+
+    /// Additional calibration function.
+    ///
+    /// Used for tables, which dont have a well defined constant length. This function is
+    /// automatically called when obtaining the table via XSDT/RSDT. For most tables this function
+    /// does nothing.
+    fn calibrate(&mut self) {}
 }
 
 /// Advanced Configuration and Power Interface.
@@ -143,7 +152,7 @@ pub mod acpi_service {
 pub struct ACPISDTHeader {
     /// 4 byte signature field, which defines which table is being used.
     pub signature: [UChar; 4],
-    /// The size of the entire table.
+    /// The size of the entire table in bytes.
     pub length: u32,
     /// The revision of the ACPI.
     revision: u8,

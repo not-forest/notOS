@@ -117,11 +117,13 @@ pub mod kernel_components {
             /// Defines RSDP/XSDP pointer table. The main entry of ACPI journey.
             pub mod rsdp;
             /// Defines RSDT/XSDT tables. Those tables contain a list of pointers to ACPI fixed
-            /// tables.
+            /// 
             pub mod rsdt;
             /// Main ACPI tables that defines hardware features and allows to manipulate with it
             /// via it's mapped registers. 
             pub mod fadt;
+            /// 
+            pub mod madt;
 
             /// This module defines differentiated ACPI tables and AML language interpreter.
             pub mod diff {

@@ -107,6 +107,7 @@ impl RSDT {
                                     // Here we are free to cast the header pointer as the SDT.
                                     p1.cast::<T>().as_mut().unwrap()
                                 };
+                                sdt.calibrate(); // Calibrating is necessary for some tables.
                                 return Ok(Some(sdt));
                             },
                             Err(e) => return Err(e),
@@ -224,6 +225,7 @@ impl XSDT {
                                 // Here we are free to cast the header pointer as the SDT.
                                 ptr.cast::<T>().as_mut().unwrap()
                             };
+                            sdt.calibrate(); // Calibrating is necessary for some tables.
                             return Ok(Some(sdt));
                         },
                         Err(e) => return Err(e),
