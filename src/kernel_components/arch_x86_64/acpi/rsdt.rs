@@ -31,7 +31,7 @@ impl Debug for SDTPointer {
 /// Data structure used in the ACPI programming interface, which contains pointers
 /// to all other SDTs. This is a legacy version of newer XSDT table, which use 32-bit
 /// addresses so it is not used anymore.
-#[repr(C)]
+#[repr(C, packed)]
 #[derive(Debug, Clone)]
 pub struct RSDT {
     /// RSDT has 8-byte signature header.
@@ -155,7 +155,7 @@ impl RSDT {
 /// to all other SDTs. This version is used in x86_64 systems as a substitution of legacy
 /// 1.0 RSDT.
 #[derive(Debug, Clone)]
-#[repr(C)]
+#[repr(C, packed)]
 pub struct XSDT {
     /// XSDT has 8-byte signature header.
     pub header: ACPISDTHeader,

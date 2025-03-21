@@ -147,7 +147,7 @@ pub mod acpi_service {
 /// First part of every table structures related to ACPI. All ACPI SDTs may be splitted
 /// in two parts. This is the first part which is the same for all of them, with different
 /// minor changes.
-#[repr(C, align(0x4))]
+#[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
 pub struct ACPISDTHeader {
     /// 4 byte signature field, which defines which table is being used.

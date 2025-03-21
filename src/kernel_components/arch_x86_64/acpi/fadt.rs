@@ -15,7 +15,7 @@ use proc_macros::public;
 /// hardware. The FADT always refers to the DSDT table, which contains information and description
 /// for various vendor specific system features. Table defines ACPI information vital to an
 /// ACPI-compatible OS, such as the base address for power related register blocks.
-#[repr(C)]
+#[repr(C, packed)]
 #[derive(Debug)]
 pub struct FADT {
     /// Table header.

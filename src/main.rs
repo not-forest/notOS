@@ -159,8 +159,9 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
 
         use notOS::kernel_components::arch_x86_64::acpi::acpi::{RSDT, MADT};
         let rsdt = RSDT::new();
-        let madt = rsdt.find::<MADT>();
-        notOS::debug!("{:?}", madt);
+        let madt = rsdt.find::<MADT>().unwrap().unwrap();
+        let entries = madt.entries();
+        println!("Amount of MADT entries: {}", entries.count());
 
         // Pushing the process to the queue.
 /*         PROCESS_MANAGEMENT_UNIT.queue(beep); */
