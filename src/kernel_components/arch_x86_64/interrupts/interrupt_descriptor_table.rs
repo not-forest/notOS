@@ -40,7 +40,7 @@ single! {
 #[repr(C, align(16))]
 pub struct IDT {
     table: [GateDescriptor; 256],
-    ints: [bool; 256],
+    pub ints: [bool; 256],
 }
 
 impl IDT {

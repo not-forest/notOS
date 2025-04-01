@@ -14,9 +14,6 @@ use crate::kernel_components::sync::Mutex;
 use crate::kernel_components::arch_x86_64::post::DEBUG_BOARD;
 use super::pic_command_words::*;
 
-/// Static vessel for PICs.
-pub static PROGRAMMABLE_INTERRUPT_CONTROLLER: Mutex<Option<ChainedPics>> = Mutex::new(None);
-
 /// Defines the PIC IRQ mappings (hardwired lines) for the PIC controller.
 ///
 /// The PIC can be configured either as a master or a slave device. This will change the upcoming

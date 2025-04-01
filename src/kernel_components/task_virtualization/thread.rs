@@ -14,11 +14,9 @@ use alloc::sync::Arc;
 use crate::{critical_section, print};
 use crate::kernel_components::arch_x86_64::interrupts::interrupt;
 use crate::kernel_components::drivers::timers::{ClockDriver, RealTimeClock};
-use crate::kernel_components::drivers::{DriverType, DRIVER_MANAGER};
+use crate::kernel_components::drivers::{DRIVER_MANAGER, DriverType, interrupts::InterruptControllerDriver};
 use crate::kernel_components::memory::stack_allocator::Stack;
-use crate::kernel_components::arch_x86_64::{
-    controllers::PROGRAMMABLE_INTERRUPT_CONTROLLER, interrupts,
-};
+use crate::kernel_components::arch_x86_64::interrupts;
 use crate::kernel_components::task_virtualization::{Scheduler, ROUND_ROBIN};
 use super::{Process, join_handle::{JoinHandle, HandleStack, WriterReference}, PROCESS_MANAGEMENT_UNIT};
 
@@ -293,15 +291,13 @@ impl<'a> Thread<'a> {
     /// instead of ignoring the software interrupt completely panic occurs. 
     #[inline(never)]
     pub fn r#yield() {
-        if interrupt::is_interrupts_enabled() {
-            let timer_interrupt_int = PROGRAMMABLE_INTERRUPT_CONTROLLER
-                .lock()
-                .as_mut()
-                .map(|pic| pic.master.offset)
-                .expect("PIC must be initialized for this function.");
-            
-            interrupt::cause_interrupt(timer_interrupt_int);
+        let isr = unsafe {
+            DRIVER_MANAGER.driver::<Box<dyn InterruptControllerDriver>>(DriverType::Interrupt)
         }
+            .map(|int_ctrl| int_ctrl.irq_to_int(0))
+            .unwrap_or(0);
+            
+        interrupt::cause_interrupt(isr);
     }
 
     /// Halts the thread until certain condition is met.

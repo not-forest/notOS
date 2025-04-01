@@ -215,7 +215,7 @@ pub mod kernel_components {
 
             pub use pit::{PIT, PITReadbackCMD, PITReadback, PITCommand};
             pub use rtc::{RTC, CMOSAddr};
-            pub use pic::{Pic, PROGRAMMABLE_INTERRUPT_CONTROLLER};
+            pub use pic::Pic;
             pub use ps_2::{PS2, PSControllerCommand, PSControllerConfiguration};
             pub use beeper::{PCBeeper, BeeperModeOfOperation};
         }

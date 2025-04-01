@@ -8,15 +8,15 @@ use core::any::Any;
 use core::arch::asm;
 
 use crate::kernel_components::arch_x86_64::interrupts::{interrupt, INTERRUPT_DESCRIPTOR_TABLE};
-use crate::kernel_components::drivers::DRIVER_MANAGER;
+use crate::kernel_components::drivers::{
+    DRIVER_MANAGER, DriverType,
+    keyboards::KeyboardDriver,
+    interrupts::InterruptControllerDriver,
+};
 use crate::kernel_components::keyboard_interface::OS_CHAR_BUFFER;
 use crate::kernel_components::memory::EntryFlags;
 use crate::kernel_components::task_virtualization::{Thread, Scheduler, PROCESS_MANAGEMENT_UNIT, PRIORITY_SCHEDULER, ROUND_ROBIN, ThreadState};
 use crate::{critical_section, debug, handler_function_prologue, print, println, warn, Color};
-use crate::kernel_components::arch_x86_64::controllers::{
-    PROGRAMMABLE_INTERRUPT_CONTROLLER,
-    PS2,
-};
 use super::handler_functions::*;
 
 /// Software timer interrupt handler
@@ -34,6 +34,8 @@ unsafe extern "x86-interrupt" fn timer_interrupt_handler(mut stack_frame: Interr
         ThreadState, ProcState,
     };
     use core::sync::atomic::Ordering;
+
+    handler_function_prologue!(32);
 
     // This thread input must be changed when the function call must be done.
     //
@@ -144,10 +146,11 @@ unsafe extern "x86-interrupt" fn timer_interrupt_handler(mut stack_frame: Interr
         }
     });
 
-    PROGRAMMABLE_INTERRUPT_CONTROLLER.lock()
-        .as_mut()
-        .map(|pic| 
-            pic.master.end_of_interrupt()
+    DRIVER_MANAGER
+        .driver::<Box<dyn InterruptControllerDriver>>(DriverType::Interrupt)
+        .map_or(
+            crate::error!("Unable to handle interrupt prologue. No interrupt controller driver available."), 
+            |d| d.prologue(stack_frame)
         );
 
     // Before the iretq instruction is done, we must change the rdi, so it can be used as
@@ -159,7 +162,7 @@ unsafe extern "x86-interrupt" fn timer_interrupt_handler(mut stack_frame: Interr
         "cmp {0:r}, 0x0",    // If the thread must obtain some inputs, do:
         "cmovne rdi, {0:r}", // This line only changes the behavior.
         
-        "add rsp, 0x90",
+        "add rsp, 0xa0",
         "pop rax",
         "pop rcx",
         "pop rdx",
@@ -180,28 +183,30 @@ unsafe extern "x86-interrupt" fn timer_interrupt_handler(mut stack_frame: Interr
 /// controlls with other aplications in some queue style.
 #[no_mangle]
 unsafe extern "x86-interrupt" fn keyboard_interrupt_handler(stack_frame: InterruptStackFrame) {
-    use crate::kernel_components::arch_x86_64::interrupts;
-    use crate::kernel_components::drivers::{DriverType, keyboards::KeyboardDriver};
+    handler_function_prologue!(33);
 
-    critical_section!(|| {
-        handler_function_prologue!(33);
+    if let Some(intd) = DRIVER_MANAGER
+        .driver::<Box<dyn InterruptControllerDriver>>(DriverType::Interrupt) {
 
-        if let Some(keyboard) = unsafe{DRIVER_MANAGER.driver::<Box<dyn KeyboardDriver>>(DriverType::Keyboard)} {
-            // If key exist, writing data to the buffer so that applications can use it.
-            if let Some(key) = keyboard.read() {
-                OS_CHAR_BUFFER.lock().append(key)
+        critical_section!(|| {
+
+            if let Some(keyboard) = DRIVER_MANAGER.driver::<Box<dyn KeyboardDriver>>(DriverType::Keyboard) {
+                // If key exist, writing data to the buffer so that applications can use it.
+                if let Some(key) = keyboard.read() {
+                    OS_CHAR_BUFFER.lock().append(key)
+                }
+            } else {
+                use crate::kernel_components::arch_x86_64::controllers::PS2;
+                warn!("Keyboard input detected, yet ignored due to no available keyboard driver found.");
+                // This allows PIC to send more keyboard interrupts.
+                let _ = PS2::new().read_data();
             }
-        } else {
-            warn!("Keyboard input detected, yet ignored due to no available keyboard driver found.");
-            // This allows PIC to send more keyboard interrupts.
-            let _ = PS2::new().read_data();
-        }
-    });
-    PROGRAMMABLE_INTERRUPT_CONTROLLER.lock()
-        .as_mut()
-        .map(|pic| 
-            pic.master.end_of_interrupt()
-        );
+        });
+
+        intd.prologue(stack_frame);
+    } else {
+        crate::error!("Unable to handle interrupt prologue. No interrupt controller driver available."); 
+    }
 }
 
 /// A timer interrupt handler.

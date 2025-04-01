@@ -2,7 +2,7 @@ use core::{any::Any, ops::DerefMut};
 
 /// A module for all build-in libraries.
 
-use alloc::{boxed::Box, collections::BTreeMap, string::String};
+use alloc::{boxed::Box, collections::BTreeMap, string::{String, ToString}};
 use keyboards::keyboard::KeyboardDriver;
 use timers::ClockDriver;
 
@@ -52,7 +52,7 @@ impl DriverManager {
     /// An error if such driver already exist. A string with driver's name if it was loaded
     /// successfully.
     pub fn load<T>(&mut self, driver: T, dtype: DriverType) -> DriverResult<String> where T: Driver {
-        let str = String::from(driver.name());
+        let str = driver.name().to_string();
         if let Err(_) = self.drivers.try_insert(dtype, Box::new(driver)) {
             Err(DriverError::AlreadyLoaded)
         } else {
@@ -92,9 +92,15 @@ macro_rules! impl_driver {
 }
 
 /// Defines different driver types for query.
+///
+/// This can be thought as a tag, which allows to easily locate the required loaded driver inside
+/// the binary tree structure.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DriverType {
-    Keyboard, Mouse, Clock
+    Keyboard, 
+    Mouse, 
+    Clock, 
+    Interrupt
 }
 
 /// Error type for driver error handling.
@@ -139,4 +145,12 @@ pub mod timers {
 
     pub use clock::ClockDriver;
     pub use rtc_clock::RealTimeClock;
+}
+
+/// Interrupts
+pub mod interrupts {
+    /// Interrupt controller driver. Either APIC or PIC, LPIC etc.
+    pub mod int_ctrl;
+
+    pub use int_ctrl::InterruptControllerDriver;
 }

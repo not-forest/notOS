@@ -3,7 +3,6 @@
 use crate::kernel_components::structures::{thread_safe::ConcurrentQueue, Single};
 use crate::kernel_components::memory::allocators::{GAllocator, GLOBAL_ALLOCATOR};
 use crate::kernel_components::sync::Mutex;
-use crate::kernel_components::arch_x86_64::controllers::PROGRAMMABLE_INTERRUPT_CONTROLLER;
 
 use crate::single;
 use super::{Process, ProcState, Task, Thread, ThreadState, Scheduler, ROUND_ROBIN, PRIORITY_SCHEDULER};
