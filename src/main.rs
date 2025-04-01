@@ -26,8 +26,8 @@ use alloc::boxed::Box;
 /// This is the main binary (kernel) space. As the library will build in, ew features will be added further.
 use notOS::{
     kernel_components::{
-        arch_x86_64::{controllers::pic::ChainedPics, interrupts}, drivers::{keyboards::{KeyboardDriver, PS2Keyboard}, timers::ClockDriver}, memory::MEMORY_MANAGEMENT_UNIT, registers::{control, ms}
-    }, print, println, single, warn, BUDDY_ALLOC, FREE_LIST_ALLOC, GLOBAL_ALLOCATOR
+        arch_x86_64::{controllers::pic::ChainedPics, interrupts}, drivers::{interrupts::InterruptControllerDriver, keyboards::{KeyboardDriver, PS2Keyboard}, timers::ClockDriver}, memory::MEMORY_MANAGEMENT_UNIT, registers::{control, ms}
+    }, print, println, programs, single, warn, BUDDY_ALLOC, FREE_LIST_ALLOC, GLOBAL_ALLOCATOR
 };
 
 #[no_mangle]
@@ -64,8 +64,6 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
         DRIVER_MANAGER, DriverType,
         timers::RealTimeClock,
     };
-
-    use notOS::kernel_components::arch_x86_64::controllers::PROGRAMMABLE_INTERRUPT_CONTROLLER;
 
     // Memory initialization.
     // The global allocator is a mutable static that do not use any locking 
@@ -141,30 +139,25 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
         // Remapping the PIC controller.
         let mut pics = ChainedPics::new_contiguous(32);
         pics.initialize();
-
-        PROGRAMMABLE_INTERRUPT_CONTROLLER.lock().replace(pics);
    
         // Loading drivers
         {
             let clock_driver: Box<dyn ClockDriver> = Box::new(RealTimeClock::new()); 
             let keyboard_driver: Box<dyn KeyboardDriver> = Box::new(PS2Keyboard::default());
+            let pic_driver: Box<dyn InterruptControllerDriver> = Box::new(pics);
 
             let _ = DRIVER_MANAGER.load(clock_driver, DriverType::Clock);
             let _ = DRIVER_MANAGER.load(keyboard_driver, DriverType::Keyboard); 
+            let _ = DRIVER_MANAGER.load(pic_driver, DriverType::Interrupt);
         }
-
         
         use notOS::kernel_components::task_virtualization::{Process, PROCESS_MANAGEMENT_UNIT};
         let stack1 = MEMORY_MANAGEMENT_UNIT.allocate_stack(16).unwrap();
 
-        use notOS::kernel_components::arch_x86_64::acpi::acpi::{RSDT, MADT};
-        let rsdt = RSDT::new();
-        let madt = rsdt.find::<MADT>().unwrap().unwrap();
-        let entries = madt.entries();
-        println!("Amount of MADT entries: {}", entries.count());
+        let shell = Process::new_void(stack1, 8, 0, 1, None, programs::shell);
 
         // Pushing the process to the queue.
-/*         PROCESS_MANAGEMENT_UNIT.queue(beep); */
+        PROCESS_MANAGEMENT_UNIT.queue(shell);
     }
 
     loop {

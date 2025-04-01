@@ -2,13 +2,15 @@
 /// keyboard driver.
 
 use crate::kernel_components::sync::Mutex;
+use crate::kernel_components::drivers::{DRIVER_MANAGER, DriverType, interrupts::InterruptControllerDriver};
 use crate::single;
 use core::{
     ops::{Deref, DerefMut}, 
     sync::atomic::{AtomicU8, Ordering}
 };
 
-use super::{arch_x86_64::{controllers::PROGRAMMABLE_INTERRUPT_CONTROLLER, interrupts::INTERRUPT_DESCRIPTOR_TABLE}, os::OSChar, task_virtualization::{Thread, ThreadState}};
+use alloc::boxed::Box;
+use super::{arch_x86_64::interrupts::INTERRUPT_DESCRIPTOR_TABLE, os::OSChar, task_virtualization::{Thread, ThreadState}};
 
 /// Global static OS char buffer.
 single! {
@@ -47,11 +49,10 @@ impl KeyboardInterface {
     pub fn on_click<F: 'static, D: 'static>(&mut self, t: &mut Thread, f: F) where
         F: Fn(&mut Thread, Option<&OSChar>) -> D + Send
     {
-        // TODO! change when APIC will be implemented.
-        let isr = unsafe { &PROGRAMMABLE_INTERRUPT_CONTROLLER }
-            .lock()
-            .as_mut()
-            .map(|pic| pic.master.offset + 1)
+        let isr = unsafe {
+            DRIVER_MANAGER.driver::<Box<dyn InterruptControllerDriver>>(DriverType::Interrupt)
+        }
+            .map(|int_ctrl| int_ctrl.irq_to_int(1))
             .unwrap_or(0);
 
         let iface = self.clone();
