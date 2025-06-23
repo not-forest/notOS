@@ -9,14 +9,15 @@ use timers::ClockDriver;
 use crate::{debug, single};
 
 pub type DriverResult<T> = Result<T, DriverError>;
+pub type DriverName = String;
 
 /// A custom trait that marks out something as a driver.
 /// 
 /// All sub-driver category must implement this trait for downcast it from this supertrait. This
 /// way many drivers could be stored within the binary tree.
 pub trait Driver: Any {
-    fn as_driver(&mut self) -> &mut dyn Any;  // Method to enable downcasting
-    fn name(&self) -> &str;
+    /// Returns information about the driver.
+    fn info(&self) -> DriverInfo;
 }
 
 /// A default driver manager.
@@ -24,6 +25,17 @@ pub trait Driver: Any {
 /// During OS boot drivers must be loaded into their corresponding pointers.
 single! {
     pub mut DRIVER_MANAGER: DriverManager = DriverManager::default()
+}
+
+/// Driver information.
+///
+/// This information allows to define several things for kernel and external modules:
+/// - For which peripheral this driver is implemented;
+/// - What name does this driver has (used to not store drivers with same names.);
+#[derive(Debug)]
+pub struct DriverInfo {
+    pub r#type: DriverType,
+    pub name: DriverName,
 }
 
 /// Main structure that allows to interface all other drivers.
@@ -34,15 +46,18 @@ single! {
 /// drivers logic.
 #[derive(Default)]
 pub struct DriverManager {
-    drivers: BTreeMap<DriverType, Box<dyn Driver>>,
+    drivers: BTreeMap<String, Box<dyn Driver>>,
 }
 
 impl DriverManager {
-    /// Based on the driver type, downcasts a driver into it's sub-driver category for future use.
-    /// Every trait that implement Driver super trait can be found this way.
-    pub fn driver<T: Driver>(&mut self, dtype: DriverType) -> Option<&mut T> {
-        self.drivers.get_mut(&dtype)
-            .and_then(|driver| driver.as_driver().downcast_mut::<T>())
+    /// Obtains the currently loaded driver based on it's name.
+    ///
+    /// # Returns
+    ///
+    /// Returns a mutable reference if it is loaded to the kernel.
+    pub fn driver(&mut self, name: DriverName) -> Option<&mut dyn Driver> {
+        self.drivers.get_mut(&name)
+            .and_then(|driver| driver.)
     }
 
     /// Loads the driver into the driver manager.
@@ -51,9 +66,9 @@ impl DriverManager {
     ///
     /// An error if such driver already exist. A string with driver's name if it was loaded
     /// successfully.
-    pub fn load<T>(&mut self, driver: T, dtype: DriverType) -> DriverResult<String> where T: Driver {
-        let str = driver.name().to_string();
-        if let Err(_) = self.drivers.try_insert(dtype, Box::new(driver)) {
+    pub fn load<T>(&mut self, driver: T, name: DriverName) -> DriverResult<String> where T: Driver {
+        let str = driver.info().name.to_string();
+        if let Err(_) = self.drivers.try_insert(name, Box::new(driver)) {
             Err(DriverError::AlreadyLoaded)
         } else {
             debug!("Mod \"{}\" is loaded", str.as_str());
@@ -67,28 +82,14 @@ impl DriverManager {
     ///
     /// An error if such driver does not exist already. An Ok(()) if was deleted successfully
     pub fn unload(&mut self, name: String) -> DriverResult<()> {
-        if let Some((dtype, _)) = self.drivers.iter().find(|(k, v)| v.name() == name) {
-            self.drivers.remove(&dtype.clone());
+        if let Some((name, _)) = self.drivers.iter().find(|(k, v)| v.info().name == name) {
+            self.drivers.remove(&name.clone());
             debug!("Mod \"{}\" is unloaded", name.as_str());
             Ok(())
         } else {
             Err(DriverError::NotLoaded)
         }
     }
-}
-
-macro_rules! impl_driver {
-    ($t:ty) => {
-        impl Driver for $t {
-            fn as_driver(&mut self) -> &mut dyn core::any::Any {
-                self
-            }
-
-            fn name(&self) -> &str {
-                stringify!($t)
-            }
-        }
-    };
 }
 
 /// Defines different driver types for query.

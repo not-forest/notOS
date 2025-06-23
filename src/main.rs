@@ -146,9 +146,9 @@ pub extern "C" fn _start(_multiboot_information_address: usize) {
             let keyboard_driver: Box<dyn KeyboardDriver> = Box::new(PS2Keyboard::default());
             let pic_driver: Box<dyn InterruptControllerDriver> = Box::new(pics);
 
-            let _ = DRIVER_MANAGER.load(clock_driver, DriverType::Clock);
-            let _ = DRIVER_MANAGER.load(keyboard_driver, DriverType::Keyboard); 
-            let _ = DRIVER_MANAGER.load(pic_driver, DriverType::Interrupt);
+            let _ = DRIVER_MANAGER.load(clock_driver, DriverType::Clock).is_err_and(|e| panic!("{:?}", e));
+            let _ = DRIVER_MANAGER.load(keyboard_driver, DriverType::Keyboard).is_err_and(|e| panic!("{:?}", e)); 
+            let _ = DRIVER_MANAGER.load(pic_driver, DriverType::Interrupt).is_err_and(|e| panic!("{:?}", e));
         }
         
         use notOS::kernel_components::task_virtualization::{Process, PROCESS_MANAGEMENT_UNIT};

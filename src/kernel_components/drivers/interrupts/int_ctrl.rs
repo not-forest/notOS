@@ -3,7 +3,9 @@
 /// Such driver is a systemwide driver that shall not be reimplemented via custom implementations.
 
 use alloc::boxed::Box;
-use crate::kernel_components::drivers::Driver;
+use alloc::string::{String, ToString};
+
+use crate::kernel_components::drivers::{Driver, DriverInfo, DriverType};
 use crate::kernel_components::arch_x86_64::interrupts::{
     handler_functions::InterruptStackFrame,
     INTERRUPT_DESCRIPTOR_TABLE,
@@ -12,7 +14,7 @@ use crate::kernel_components::arch_x86_64::controllers::{
     pic::ChainedPics,
 };
 
-pub trait InterruptControllerDriver {
+pub trait InterruptControllerDriver: Driver {
     /// Interrupt controller start function.
     ///
     /// Make sure a proper bit is set in global IDT table structure because some implementation 
@@ -44,11 +46,13 @@ impl InterruptControllerDriver for ChainedPics {
 
     /* PIC required a proper EOI signal. */
     unsafe fn prologue(&mut self, stack_frame: InterruptStackFrame) {
-        if let Some((i, _)) = INTERRUPT_DESCRIPTOR_TABLE.ints
-                                                    .iter()
-                                                    .enumerate()
-                                                    .skip_while(|(ref i, b)| *i < 32)
-                                                    .find(|(i, ref b)| **b) {
+        if let Some((i, _)) = 
+            INTERRUPT_DESCRIPTOR_TABLE.ints
+                .iter()
+                .enumerate()
+                .skip_while(|(ref i, b)| *i < 32)
+                .find(|(i, ref b)| **b) {
+
             if !self.is_spurious(i as u8) {
                 self.notify_end_of_interrupt(i as u8);
             }            
@@ -66,6 +70,12 @@ impl InterruptControllerDriver for ChainedPics {
     }
 }
 
-/* All types below implement the InterruptControllerDriver trait. */
-impl_driver!(Box<dyn InterruptControllerDriver>);
-impl_driver!(ChainedPics);
+impl Driver for ChainedPics {
+    fn info(&self) -> DriverInfo {
+        use crate::kernel_components::drivers::DriverInfo;
+        DriverInfo {
+            r#type: DriverType::Interrupt,
+            name: "PIC".to_string(),
+        }
+    }
+}
