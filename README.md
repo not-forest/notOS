@@ -1,3 +1,6 @@
+# ATTENTION
+This project has been archived. Please see [notOSv2](https://github.com/not-forest/notOSv2) for the ongoing rewrite
+
 # notOS - A Rust OS Implementation
 
 ## Overview
