@@ -1,0 +1,12 @@
+[package]
+name = "notOS-synchronization"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+osPrimitives = { package = "notOS-primitive-data-types", path = "../primitives" }
+
+no-std-compat = { version = "0.4.1", features = [ "alloc" ] }
+
+[features]
+std = [ "no-std-compat/std" ]

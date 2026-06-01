@@ -1,0 +1,18 @@
+# Top-level workspace TOML for compiling notOS kernel.
+[workspace]
+resolver = "3"
+# Main notOS modules to be compiled.
+members = [
+    "dataStructures/primitives",
+    "dataStructures/structures",
+    "dataStructures/sync",
+
+    "taskVirtualization",
+
+    "memoryManagement",
+    "memoryManagement/heap",
+]
+# External crates for as build dependencies or tools.
+exclude = [
+    "buildConfig"
+]

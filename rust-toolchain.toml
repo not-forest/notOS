@@ -1,0 +1,6 @@
+[toolchain]
+channel = "nightly"
+# Tells rustup to automatically add required targets.
+targets = [
+    "x86_64-unknown-none",
+]
