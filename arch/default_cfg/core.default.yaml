@@ -1,0 +1,45 @@
+# Core Configuration Template.
+#
+# It is used to define main mandatory constants and flags, but is not
+# only limited to those definitions. Usually custom hardware (if not
+# virtualization) would require to additionally attack some linker script, C
+# or assembly source files as additional parameters.
+# 
+# **IMPORTANT**
+#
+# The buildConfig helper allows to attach multiple files at once. It is handy to
+# use defaults provided within this file and rename them within your configurations,
+# keeping defaults implicitly. Only change variable that differ from defaults.
+#
+# The above prevents redundant code. The inner configuration of YAML, however, is
+# very flexible, and not tied to specific naming like "mandatory"/"configuration".
+# It is still desirable to also keep the naming convention within the YAML as well.
+# All nested mappings must follow this template when using anchors.
+#
+# Copyright (c) 2026 not-forest
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+mandatory: &core_defaults
+  # Amount of stack memory to allocate for kernel's internal functionality.
+  kernel_stack_size: 16KB
+  # Amount of heap memory to allocate for kernel heap data structures. 
+  kernel_heap_size: 5KB
+
+  # Size of one page in bytes. This default is used for most hardware architectures.
+  page_size: 4096
+  
+  # Amount of page table levels. Unused if `has_virtual_memory: false`. 
+  page_table_levels: ~
+
+  # For readability, compile-time boolean flags are separated within this mapping.
+  cfg: &defaults
+    # Defines if current target architecture supports MMU operations on virtual
+    # memory. If your target does not support that, can be safely ignored.
+    has_virtual_memory: false

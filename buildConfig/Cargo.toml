@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 build_const = "0.2.2"
 rust-yaml   = "1.0.1"
+cc = "1.0"

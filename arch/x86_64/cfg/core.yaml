@@ -1,4 +1,4 @@
-# Core configuration constants definitions for given architecture.
+# Core configuration and constant definitions for given architecture.
 #
 # Copyright (c) 2026 not-forest
 #
@@ -11,10 +11,11 @@
 # SOFTWARE.
 
 mandatory:
-  kernel_stack_size: 16KB
-  user_stack_size: 64KB
-
-  max_cpus: 16
-
-  page_size: 4096
+  <<: *core_defaults
   page_table_levels: 4
+
+  cfg:
+    has_virtual_memory: true
+
+compilation:
+  _script: "linker.ld"
