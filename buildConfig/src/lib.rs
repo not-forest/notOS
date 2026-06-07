@@ -39,9 +39,7 @@ impl SysConfig {
     const MB: i64 = 1024 * Self::KB;
     const GB: i64 = 1024 * Self::MB;
 
-    const LINKER_SCRIPT_PREFIX: &'static str = ".SCRIPT";
-    const C_INCLUDES_PREFIX: &'static str = ".C";
-    const ASM_INCLUDES_PREFIX: &'static str = ".ASSEMBLY";
+    const REPO_ROOT: &'static str = "../../";
 
     /// Creates a new instance of [`SysConfig`].
     ///
@@ -117,9 +115,11 @@ impl SysConfig {
     /// all main kernel constants;
     /// - arrays are defines as constant static arrays;
     /// - boolean constants are also passed as compile-time cargo flags (`#[cfg(CONFIG_<NAME>)]`);
-    /// - special constant `.script` defines linker script;
-    /// - special constants starting with `.c`/`.assembly` compiles and includes files
-    /// defined by file path;
+    /// - special constant `_linker` defines linker script;
+    /// - special constants starting with `_c`/`_assembly` compiles and includes files within the
+    /// provided directory path.
+    /// - special constants starting with `_include` will include `.h` headers within the provided
+    /// directory path.
     pub fn generate(mut self) {
         self.parse_yaml();
         self.consts.finish();
@@ -145,6 +145,37 @@ impl SysConfig {
         self
     }
 
+    /// Include external source file.
+    ///
+    /// ## Supported formats:
+    /// - `.c`: C Language source files.
+    /// - `.S`: Assembly source files with C preprocessing.
+    /// - `.s`: Assembly source files.
+    pub fn include_source(mut self, path: PathBuf) -> Self {
+        self.__include_source(path);
+        self
+    }
+
+    fn __include_source(&mut self, path: PathBuf) {
+        println!("cargo:warning=[notOS-config] Including source file: {}", 
+            path.display());
+        self.includes.file(path);
+    }
+
+    /// Include C header directory.
+    ///
+    /// Allows external C/C++ definitions and functions linkage. All `.h` files
+    /// within provided directory will be included and linked against.
+    pub fn include_directory(mut self, path: PathBuf) -> Self {
+        self.__include_directory(path);
+        self
+    }
+
+    fn __include_directory(&mut self, path: PathBuf) {
+        println!("cargo:warning=[notOS-config] Including directory {}", path.display());
+        self.includes.include(path);
+    }
+
     /// Link build crate against linker script.
     ///
     /// **Parameters**
@@ -156,8 +187,8 @@ impl SysConfig {
     }
 
     fn __include_linker_script(path: PathBuf) {
+        println!("cargo:warning=[notOS-config] Linking against: {}", path.display()); 
         println!("cargo:rustc-link-search={}", path.display());
-        println!("cargo:rustc-link-arg=-Tlinker.ld");
         println!("cargo:rerun-if-changed={}", path.display());
     }
 
@@ -169,13 +200,17 @@ impl SysConfig {
         self.paths.iter().for_each(|path| {
             println!("cargo:rerun-if-changed={}", path.display());
 
-            // Adding separator so that multiple YAMLs are concatenated together.
-            //yaml_content.push_str("\n---\n");
             File::open(path).unwrap_or_else(|err| {
                 panic!("Failed to open config file at {}: {}", path.display(), err);
             })
             .read_to_string(&mut yaml_content)
             .expect("Failed to write contents into string");
+
+            // Replacing paths on run.
+            yaml_content = yaml_content
+                .replace("./",
+                    &(path.parent().unwrap().display().to_string() + "/"))
+                .replace("//", Self::REPO_ROOT);
 
             println!("cargo:warning=[notOS-config] Processing hardware target spec: {}", path.display());
         });
@@ -189,8 +224,10 @@ impl SysConfig {
     }
 
     fn parse_key(&mut self, key_str: &str, value: &rust_yaml::Value) {
-        // Enforce the requested "CONFIG_" prefix combined with Screaming Snake Case
-        let rust_const_name = format!("CONFIG_{}", key_str.to_uppercase());
+        // Enforce the requested "CONFIG_" prefix.
+        let rust_const_name = format!("CONFIG{}{}", 
+            if key_str.starts_with("_") { "" } else { "_" }, 
+            key_str.to_uppercase());
 
         match value {
             Value::Int(i) => self.gen_key(&rust_const_name, *i),
@@ -200,16 +237,16 @@ impl SysConfig {
 
                 if *b == true {
                     // Also append as a compile-time flag if set.
-                    println!("cargo:rustc-cfg={}", rust_const_name.to_lowercase());
+                    println!("cargo::rustc-check-cfg=cfg({})", rust_const_name);
                 }
             },
             Value::String(s) => { 
                 if let Some(i) = Self::as_xbytes(s) {
                     // KB, MB, GB special case.
                     self.gen_key(&rust_const_name, i);
-                } else if rust_const_name.starts_with(".SCRIPT") {
+                } else if rust_const_name.starts_with("CONFIG_LINKER") {
                     // Link against linker script.
-                    Self::__include_linker_script(PathBuf::from(key_str));
+                    Self::__include_linker_script(PathBuf::from(s));
                 } else {
                     // Generate regular string literal. 
                     self.gen_key(&rust_const_name, s.as_str())
@@ -223,7 +260,17 @@ impl SysConfig {
                 }
             },
             // Sequences are generated recursively.
-            Value::Sequence(seq) => self.gen_sequence(&rust_const_name, seq),
+            Value::Sequence(seq) => {
+                // Special case for external source code.
+                if rust_const_name.starts_with("CONFIG_C") ||
+                   rust_const_name.starts_with("CONFIG_ASSEMBLY") {
+                    self.gen_sources(&seq);
+                } else if rust_const_name.starts_with("CONFIG_INCLUDE") {
+                    self.gen_includes(&seq);
+                } else {
+                    self.gen_sequence(&rust_const_name, seq);
+                }
+            },
             // FEAT: Create ZST struct instead?
             Value::Null => println!("cargo:warning=[notOS-config] Null value of name {} ignored.",
                 rust_const_name),
@@ -249,18 +296,61 @@ impl SysConfig {
 
     // Generates sequences with recursive support.
     fn gen_sequence(&mut self, name: &String, seq: &Vec<Value>) {
+        let flattener = FlattenedValues::new(seq);
+        let first_primitive = FlattenedValues { stack: flattener.stack.clone() }.next();
+
+        let Some(target_type) = first_primitive else { return; };
+
+        match target_type {
+            Value::Int(_) => {
+                let data: Vec<i64> = flattener.filter_map(|v| match v {
+                    Value::Int(i) => Some(*i),
+                    _ => None,
+                }).collect();
+                self.gen_array(name, data.as_slice());
+            },
+            Value::Bool(_) => {
+                let data: Vec<bool> = flattener.filter_map(|v| match v {
+                    Value::Bool(b) => Some(*b),
+                    _ => None,
+                }).collect();
+                self.gen_array(name, data.as_slice());
+            },
+            Value::Float(_) => {
+                let data: Vec<f64> = flattener.filter_map(|v| match v {
+                    Value::Float(f) => Some(*f),
+                    _ => None,
+                }).collect();
+                self.gen_array(name, data.as_slice());
+            },
+            Value::String(_) => {
+                let data: Vec<&str> = flattener.filter_map(|v| match v {
+                    Value::String(s) => Some(s.as_str()),
+                    _ => None,
+                }).collect();
+                self.gen_array(name, data.as_slice());
+            },
+            _ => panic!("Unsupported type definition for constant sequence."),
+        }
+    }
+
+    // Parses sequence of string paths to include during compilation stage.
+    fn gen_sources(&mut self, seq: &Vec<Value>) {
         seq.iter().for_each(|v| match v {
-            Value::Mapping(nested) => {
-                for (key, value) in nested.iter() {
-                    let key_str = key.as_str()
-                        .expect("YAML configuration key found as invalid string literal.");
-                    self.parse_key(key_str, value);
-                }
-            }
-            Value::Sequence(_seq) => self.gen_sequence(name, _seq),
-            // FEAT: Create enum types instead?
-            Value::Null => println!("cargo:warning=[notOS-config] Null value of name {} ignored.", name),
-            _ => self.gen_array(name, seq.as_slice()),
+            Value::String(s) => self.__include_source(
+                PathBuf::from(s)
+            ),
+            _ => panic!("Data types other than strings are not allowed for external source files list."),
+        });
+    }
+
+    // Parses sequence of string path to include as directories with headers.
+    fn gen_includes(&mut self, seq: &Vec<Value>) {
+        seq.iter().for_each(|v| match v {
+            Value::String(s) => self.__include_directory(
+                PathBuf::from(s)
+            ),
+            _ => panic!("Data types other than strings are not allowed for external source files list."),
         });
     }
 
@@ -290,5 +380,43 @@ impl SysConfig {
         let v = str.parse::<i64>().ok()?;
 
         Some(m * v)
+    }
+}
+
+/// A zero-allocation structural flattening iterator for deep sequences
+///
+/// Allows for nested definitions of arrays with any dimension.
+struct FlattenedValues<'a> {
+    stack: Vec<(&'a [Value], usize)>,
+}
+
+impl<'a> FlattenedValues<'a> {
+    fn new(root: &'a [Value]) -> Self {
+        Self { stack: vec![(root, 0)] }
+    }
+}
+
+impl<'a> Iterator for FlattenedValues<'a> {
+    type Item = &'a Value;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let (current_slice, index) = self.stack.last_mut()?;
+
+            if *index >= current_slice.len() {
+                self.stack.pop();
+                continue;
+            }
+
+            let val = &current_slice[*index];
+            *index += 1;
+
+            if let Value::Sequence(sub_vec) = val {
+                self.stack.push((sub_vec.as_slice(), 0));
+                continue;
+            }
+
+            return Some(val);
+        }
     }
 }
