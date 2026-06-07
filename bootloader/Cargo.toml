@@ -1,0 +1,14 @@
+[package]
+name = "notOS-bootloader"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+notOS = { path = ".." }
+build_const   = { version = "0.2.2", default-features = false }
+panic-custom = "0.1.1"
+
+[build-dependencies]
+buildConfig = { package = "notOS-build-config", path = "../buildConfig"}

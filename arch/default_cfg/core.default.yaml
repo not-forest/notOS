@@ -39,7 +39,9 @@ mandatory: &core_defaults
   page_table_levels: ~
 
   # For readability, compile-time boolean flags are separated within this mapping.
-  cfg: &defaults
+  cfg: &cfg_defaults
     # Defines if current target architecture supports MMU operations on virtual
     # memory. If your target does not support that, can be safely ignored.
     has_virtual_memory: false
+    # Defines whether heap allocations API shall be appended to the kernel implementation.
+    has_heap: true

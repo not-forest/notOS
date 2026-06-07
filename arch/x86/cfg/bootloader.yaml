@@ -1,0 +1,36 @@
+# Extra x86 bootloader-specific configuration constants
+#
+# Copyright (c) 2026 not-forest
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+compilation:
+  _linker: "./bootloader.ld"
+
+  _assembly_sources:
+    - "//arch/x86/src/asm/A20.s"
+    - "//arch/x86/src/asm/vga.s"
+    - "//arch/x86/src/asm/disk.s"
+    - "//arch/x86/src/asm/boot0.s"
+
+memory:
+  # Stack dedicated just for bootloader's usage.
+  #
+  # Both stage0 and stage1 bootloaders use this stack to
+  # initialize resources before giving control to kernel.
+  bootloader_stack_bottom: !!int 0x0500
+  bootloader_stack_top: !!int 0x7c00
+
+  # Memory range for bootloader.
+  bootloader_memory_start: !!int 0x7c00
+  bootloader_memory_end: !!int 0x9fbff
+
+  # Memory range for video memory.
+  video_memory_start: !!int 0xa0000
+  video_memory_end: !!int 0xbffff

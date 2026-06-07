@@ -1,18 +1,53 @@
-# Top-level workspace TOML for compiling notOS kernel.
+[package]
+name = "notOS"
+description = "notOS - modular cross-platform kernel."
+authors = ["not-forest <sshkliaiev@gmail.com>"]
+version = "0.1.0"
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+edition = "2024"
+
+keywords = ["notOS", "os", "kernel"]
+categories = ["notOS", "kernel", "no-std"]
+
+[dependencies]
+no-std-compat = { version = "0.4.1", features = [ "alloc" ] }
+build_const   = { version = "0.2.2", default-features = false }
+panic-custom = "0.1.1"
+
+[build-dependencies]
+buildConfig = { package = "notOS-build-config", path = "buildConfig"}
+
+[features]
+std = [ "no-std-compat/std" ]
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+lto = false
+debug = true
+overflow-checks = true
+
 [workspace]
 resolver = "3"
 # Main notOS modules to be compiled.
 members = [
-    "dataStructures/primitives",
-    "dataStructures/structures",
-    "dataStructures/sync",
+    # Bootloader image is compiled as a separate binary
+    "bootloader",
 
-    "taskVirtualization",
-
-    "memoryManagement",
-    "memoryManagement/heap",
+    # ARCHITECTURE SPECIFIC MODULES
+    "arch/x86",
+    "arch/x86_64",
 ]
-# External crates for as build dependencies or tools.
+
+# External crates for as build dependencies or custom tools.
 exclude = [
     "buildConfig"
 ]
+
+[workspace.package]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/not-forest/notOS"
