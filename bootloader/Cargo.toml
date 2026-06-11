@@ -6,7 +6,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-notOS = { path = ".." }
+#notOS = { path = ".." }
 build_const   = { version = "0.2.2", default-features = false }
 panic-custom = "0.1.1"
 

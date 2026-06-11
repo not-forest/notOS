@@ -11,13 +11,13 @@
 # SOFTWARE.
 
 compilation:
-  _linker: "./bootloader.ld"
+  _linker_sources: 
+    - "./bootloader.ld"
 
   _assembly_sources:
-    - "//arch/x86/src/asm/A20.s"
-    - "//arch/x86/src/asm/vga.s"
-    - "//arch/x86/src/asm/disk.s"
     - "//arch/x86/src/asm/boot0.s"
+  _include_asm:
+    - "//arch/x86/src/asm"
 
 memory:
   # Stack dedicated just for bootloader's usage.

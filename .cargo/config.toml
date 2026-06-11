@@ -9,4 +9,4 @@ build-x86 = "build -Zjson-target-spec --target=arch/x86/cfg/x86-unknown-none.jso
 build-x86_64 = "build --target=x86_64-unknown-none"
 
 # Build bootloader image for x86/x86_64 architectures.
-build-bootloader-x86 = "build --package notOS-bootloader -Zjson-target-spec --target=arch/x86/cfg/i386-unknown-none.json"
+build-bootloader-x86 = "build --package notOS-bootloader -Zjson-target-spec --target=arch/x86/cfg/i386-unknown-none-code16.json"

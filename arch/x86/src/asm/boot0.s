@@ -13,12 +13,9 @@
   * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
   **/
 
-.section .boot      # MBR Sector section for code.
+.code16
+.section .text      # MBR Sector section for code.
 .global _start0     # Export to linker interface ("bootloader.ld")
-
-.include "A20.s"
-.include "vga.s"
-.include "disk.s"
 
 # Extern constants from bootloader.ld script.
 .extern _BOOT0_STACK_TOP_
@@ -28,7 +25,6 @@
 /**
   * MBR sector starting function.
   */
-.code16
 _start0:
     cld             # Clear direction flag. 
     cli             # Disable interrupts.
@@ -42,6 +38,8 @@ _start0:
                                     # between 0x0500 to 0x7c00 is totally free for our
                                     # usage, which leaves us with whole 30KB of stack.
 
+    movb %dl, (_BOOT_DRIVE_)        # Saving boot drive number.
+
     # Enabling the A20 line in the following order:
     # - check if BIOS did not enabled it already;
     # - try to enable via BIOS' interrupts;
@@ -53,7 +51,7 @@ _start0:
     # - panic with error message;
     call _check_a20 
     testw  %ax, %ax
-    jnz ._load_boot1           # If AX == 1, we are good!
+    jnz .load_boot1
 
 .a20_bios:
     movw $0x2401, %ax            # BIOS Function: Enable A20 Gate
@@ -61,7 +59,7 @@ _start0:
     
     call _check_a20
     testw %ax, %ax
-    jnz _load_boot1
+    jnz .load_boot1
 
 .a20_keyboard:
     call .keyboard_wait_command
@@ -79,7 +77,7 @@ _start0:
     call _check_a20
     popw %cx
     testw %ax, %ax
-    jnz ._load_boot1
+    jnz .load_boot1
     loop .keyboard_timeout_loop  # Decrement CX and retry until 0
 
 .a20_fast:
@@ -94,7 +92,7 @@ _start0:
     call    _check_a20
     popw    %cx
     testw   %ax, %ax
-    jnz     ._load_boot1
+    jnz     .load_boot1
     loop    .fast_timeout_loop
 
     # Panic with error message if all above methods failed.
@@ -104,12 +102,13 @@ _start0:
 .load_boot1:
     # Loading second stage bootloader via BIOS functions.
     movw $_SECOND_STAGE_ADDR_, %bx  # Read from address of second stage bootloader.
-    movw $_SECTORS_AMOUNT_, %dh     # Defined at compile-time to fully load the whole boot1.
+    movb $_SECTORS_AMOUNT_, %dh     # Defined at compile-time to fully load the whole boot1.
+    movb (_BOOT_DRIVE_), %dl        # Provided by BIOS. Was preserved at the entry point.
 
     call _load_disk;
 
 .start_boot1:
-    call _start1;
+    call _start;
 
 .keyboard_wait_command:
     inb $0x64, %al
@@ -117,6 +116,13 @@ _start0:
     jnz .keyboard_wait_command  # Loop if busy (1 = Full, 0 = Empty)
     ret
 
-.section .boot.rodata
+_BOOT_DRIVE_:
+    .byte 0x00
+
+.section .rodata
 .a20_panic_msg:
-    .string "Unable to enable A20."
+    .string "Failed to enable A20."
+
+.include "A20.s"
+.include "vga.s"
+.include "disk.s"

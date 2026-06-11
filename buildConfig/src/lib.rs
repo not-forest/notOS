@@ -30,16 +30,17 @@ use cc::Build;
 pub struct SysConfig {
     /// Path to `.yaml` configuration files.
     pub paths: Vec<PathBuf>,
+    name: String,
     consts: ConstValueWriter,
     includes: Build,
+
+    root_path: PathBuf,
 }
 
 impl SysConfig {
     const KB: i64 = 1024;
     const MB: i64 = 1024 * Self::KB;
     const GB: i64 = 1024 * Self::MB;
-
-    const REPO_ROOT: &'static str = "../../";
 
     /// Creates a new instance of [`SysConfig`].
     ///
@@ -48,11 +49,15 @@ impl SysConfig {
     /// * `gen_name`: Name of generated file that will include all necessary constants.
     pub fn new(gen_name: &str) -> Self {
         Self {
+            name: gen_name.to_string(),
             consts: ConstWriter::for_build(gen_name)
                 .expect("Failed to initialize constant code generator")
                 .finish_dependencies(),
             includes: Build::new(),
             paths: Vec::new(),
+            root_path: PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .parent().expect("Failed to locate workspace root.")
+                .to_path_buf()
         }
     }
 
@@ -75,9 +80,9 @@ impl SysConfig {
     ///
     /// * `name`: Configuration file name.
     pub fn include_yaml(self, name: &str) -> Self {
+        let root = self.root_path.clone();
         self.include_yaml_path(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .parent().expect("Failed to locate workspace root.")
+            root
                 .join("arch")
                 .join(env::var("CARGO_CFG_TARGET_ARCH")
                     .expect("Failed to read target architecture"))
@@ -94,9 +99,9 @@ impl SysConfig {
     ///
     /// * `name`: Configuration file name.
     pub fn include_default(self, name: &str) -> Self {
+        let root = self.root_path.clone();
         self.include_yaml_path(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .parent().expect("Failed to locate workspace root.")
+            root
                 .join("arch/default_cfg")
                 .join(name.replace(".yaml", ".default.yaml")),
         )
@@ -122,6 +127,15 @@ impl SysConfig {
     /// directory path.
     pub fn generate(mut self) {
         self.parse_yaml();
+        // Only compile when at least one source is added.
+        if self.includes.get_files().next().is_some() {
+            // Creating a set of object files to link against. 
+            // Rust compiler takes care of the rest.
+            let objects = self.includes.compile_intermediates();
+            for obj_path in objects {
+                println!("cargo:rustc-link-arg-bins={}", obj_path.display());
+            }
+        }
         self.consts.finish();
     }
 
@@ -157,6 +171,7 @@ impl SysConfig {
     }
 
     fn __include_source(&mut self, path: PathBuf) {
+        println!("cargo:rerun-if-changed={}", path.display());
         println!("cargo:warning=[notOS-config] Including source file: {}", 
             path.display());
         self.includes.file(path);
@@ -188,7 +203,8 @@ impl SysConfig {
 
     fn __include_linker_script(path: PathBuf) {
         println!("cargo:warning=[notOS-config] Linking against: {}", path.display()); 
-        println!("cargo:rustc-link-search={}", path.display());
+        println!("cargo:rustc-link-arg-bins=-T{}",   // Main script to link against. 
+            path.display());
         println!("cargo:rerun-if-changed={}", path.display());
     }
 
@@ -210,7 +226,7 @@ impl SysConfig {
             yaml_content = yaml_content
                 .replace("./",
                     &(path.parent().unwrap().display().to_string() + "/"))
-                .replace("//", Self::REPO_ROOT);
+                .replace("//", &(self.root_path.to_string_lossy() + "/"));
 
             println!("cargo:warning=[notOS-config] Processing hardware target spec: {}", path.display());
         });
@@ -267,6 +283,8 @@ impl SysConfig {
                     self.gen_sources(&seq);
                 } else if rust_const_name.starts_with("CONFIG_INCLUDE") {
                     self.gen_includes(&seq);
+                } else if rust_const_name.starts_with("CONFIG_LINKER") {
+                    self.gen_linkers(&seq);
                 } else {
                     self.gen_sequence(&rust_const_name, seq);
                 }
@@ -348,6 +366,15 @@ impl SysConfig {
     fn gen_includes(&mut self, seq: &Vec<Value>) {
         seq.iter().for_each(|v| match v {
             Value::String(s) => self.__include_directory(
+                PathBuf::from(s)
+            ),
+            _ => panic!("Data types other than strings are not allowed for external source files list."),
+        });
+    }
+
+    fn gen_linkers(&mut self, seq: &Vec<Value>) {
+        seq.iter().for_each(|v| match v {
+            Value::String(s) => Self::__include_linker_script(
                 PathBuf::from(s)
             ),
             _ => panic!("Data types other than strings are not allowed for external source files list."),

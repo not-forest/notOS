@@ -5,7 +5,7 @@ use buildConfig::SysConfig;
 const CONFIG_NAME: &'static str = "bootloader.yaml";
 
 fn main() {
-    SysConfig::new(CONFIG_NAME)
+    SysConfig::new(env!("CARGO_PKG_NAME"))
         .include_yaml(CONFIG_NAME)
         .generate();
 }

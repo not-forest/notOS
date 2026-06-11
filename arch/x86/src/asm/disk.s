@@ -13,12 +13,9 @@
   * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
   **/
 
-.section .boot
 .code16
-
+.section .text
 .global _load_disk
-
-.include "vga.s"
 
 /**
  * @brief Interface to load data from the disk via BIOS Int 13h.
@@ -55,7 +52,7 @@ _sectors_error:
     movw    $.sectors_panic_msg, %si
     call    _panic 
 
-.section .boot.rodata
+.section .rodata
 .disk_panic_msg:
     .string "Hardware disk error occured."
 .sectors_panic_msg:

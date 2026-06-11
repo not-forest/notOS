@@ -13,10 +13,9 @@
   * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
   **/
 
-.section .boot
 .code16
-
-.global panic_vga
+.section .text
+.global _panic
 
 /**
  * @brief Halts the CPU and prints a terminal error message directly to VGA memory.
@@ -30,7 +29,7 @@ _panic:
     movb $0x4F, %ah         # Color formats.
 
 .panic_loop:
-    lodsb                          # Load character from DS:SI into AL, increment SI
+    lodsb                   # Load character from DS:SI into AL, increment SI
     testb %al, %al          # Check for null terminator
     jz .panic_hang
 
@@ -39,6 +38,6 @@ _panic:
     jmp .panic_loop
 
 .panic_hang:
-    cli                     # Turn off interrupts permanently
-    hlt                     # Halt the CPU execution core
-    jmp .panic_vga_hang     # Catch-all loop just in case an NMI wakes it up
+    cli
+    hlt
+    jmp .panic_hang

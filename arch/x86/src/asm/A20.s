@@ -12,12 +12,11 @@
   * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
   **/
 
-.section .boot
 .code16
+.section .text
 
 .extern _BIOS_MAGIC_ADDR_
 .global _check_a20
-.global _support_a20
 
 /**
   * @brief Checks the status of A20 line. When having an address X, we expect X + 1MB
