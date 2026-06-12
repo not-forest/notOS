@@ -12,3 +12,6 @@ panic-custom = "0.1.1"
 
 [build-dependencies]
 buildConfig = { package = "notOS-build-config", path = "../buildConfig"}
+
+[lints]
+workspace = true

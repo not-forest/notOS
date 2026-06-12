@@ -30,7 +30,6 @@ use cc::Build;
 pub struct SysConfig {
     /// Path to `.yaml` configuration files.
     pub paths: Vec<PathBuf>,
-    name: String,
     consts: ConstValueWriter,
     includes: Build,
 
@@ -49,7 +48,6 @@ impl SysConfig {
     /// * `gen_name`: Name of generated file that will include all necessary constants.
     pub fn new(gen_name: &str) -> Self {
         Self {
-            name: gen_name.to_string(),
             consts: ConstWriter::for_build(gen_name)
                 .expect("Failed to initialize constant code generator")
                 .finish_dependencies(),

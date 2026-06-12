@@ -14,12 +14,6 @@
 
 ENTRY(_start0)
 
-MEMORY
-{
-    boot0 (rx)  : ORIGIN = 0x7c00, LENGTH = 512     /* First stage bootloader (MBR sector) */
-    boot1 (rx)  : ORIGIN = 0x7e00, LENGTH = 600K    /* Second stage bootloader */
-}
-
 _PARTITION_TABLE_ADDR_  = ABSOLUTE(ORIGIN(boot0) + 446);
 _BIOS_MAGIC_ADDR_       = ABSOLUTE(ORIGIN(boot0) + 510);
 

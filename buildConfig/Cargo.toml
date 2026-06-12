@@ -1,7 +1,15 @@
 [package]
 name = "notOS-build-config"
+description = "Build configuration parser script for the kernel."
+authors = ["not-forest <sshkliaiev@gmail.com>"]
 version = "0.1.0"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/not-forest/notOS"
+readme = "README.md"
 edition = "2024"
+
+keywords = ["build", "yaml", "script"]
+categories = ["notOS", "configuration", "parser"]
 
 [dependencies]
 build_const = "0.2.2"

@@ -2,7 +2,7 @@
 
 use buildConfig::SysConfig;
 
-const CONFIG_NAME: &'static str = "bootloader.yaml";
+const CONFIG_NAME: &str = "bootloader.yaml";
 
 fn main() {
     SysConfig::new(env!("CARGO_PKG_NAME"))

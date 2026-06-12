@@ -31,6 +31,9 @@ lto = false
 debug = true
 overflow-checks = true
 
+[lints]
+workspace = true
+
 [workspace]
 resolver = "3"
 # Main notOS modules to be compiled.
@@ -51,3 +54,10 @@ exclude = [
 [workspace.package]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/not-forest/notOS"
+
+[workspace.lints.rust]
+warnings = "deny"
+
+[workspace.lints.clippy]
+all = "deny"
+pedantic = "deny"

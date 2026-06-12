@@ -14,44 +14,34 @@
 
 ENTRY(_start)
 
-INCLUDE mem.ld
-
 SECTIONS
 {
-    . = ORIGIN(kernel);
-
     /** 
       * Ensure that the multiboot header is at the beginning to support loading from GRUB 
       **/
-    .rodata : 
+    .multiboot : AT(ORIGIN(kernel)) 
     {
         KEEP(*(.multiboot_header))
-        *(.rodata .rodata.*)
-    } > kernel_memory
+    } > kernel
 
     .text : 
     {
         *(.text .text.*)
-    }
+    } > kernel
+
     .rodata : 
     {
         *(.rodata .rodata.*)
-    }
+    } > kernel
+
     .data : 
     {
         *(.data .data.*)
-    }
+    } > kernel
+
     .bss : 
     {
         *(.bss .bss.*)
-    }
-    .eh_frame : 
-    {
-        *(.eh_frame .eh_frame.*)
-    }
-    .eh_frame_hdr : 
-    {
-        *(.eh_frame_hdr .eh_frame_hdr.*)
     }
 
     /DISCARD/ : 

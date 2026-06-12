@@ -9,6 +9,7 @@
 ///
 /// While kernel's constants are consistently reexported publicly, each architecture
 /// may define specific configuration constants for their implementation.
+#[allow(clippy::unreadable_literal)]
 pub mod constants {
     build_const::build_const!(env!("CARGO_PKG_NAME"));
 }

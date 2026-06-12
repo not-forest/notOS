@@ -12,6 +12,7 @@
 
 compilation:
   _linker_sources: 
+    - "./mem.ld"
     - "./bootloader.ld"
 
   _assembly_sources:
