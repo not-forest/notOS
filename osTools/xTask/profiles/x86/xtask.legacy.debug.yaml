@@ -1,0 +1,54 @@
+# xTask Post Script configuration YAML for x86 using legacy BIOS boot.
+#
+# Defines a set of default paramemeters for post-scripting configuration.
+#
+# **IMPORTANT**
+# 
+# For specific architecture, only those parameters, which are different from
+# the ones defined within this file, must be changed. Usually this implies
+# custom toolchain commands.
+#
+# Copyright (c) 2026 not-forest
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+# Post-compilation kernel image generation.
+builder: 
+  <<: *default_builder
+  # Output flat binary format. Supported values are "binary", "image" and "iso"
+  format: "image"
+  # Output binary name.
+  name: "notOS.img"
+  # which objcopy utility to use. Architecture specific.
+  objcopy: "i686-elf-objcopy"
+
+  recipes:
+    - package: "notOS-bootloader"
+      flags: 
+      - "-Zjson-target-spec" 
+      - "--target=arch/x86/cfg/i386-unknown-none-code16.json"
+
+# Runner configuration.
+runner: 
+  <<: *default_runner
+  engine: "qemu-system-x86_64"
+
+  flags:
+  - "-m"
+  - "1M"
+  - "-drive"
+  - "format=raw"
+  - "-s"
+  - "-S"
+  - "--no-reboot"
+  - "--no-shutdown"
+
+  debug:
+    engine: "x86_64-elf-gdb"
+    enabled: true

@@ -19,9 +19,11 @@ _BIOS_MAGIC_ADDR_       = ABSOLUTE(ORIGIN(boot0) + 510);
 
 SECTIONS
 {
+    . = ORIGIN(boot0);
+    _BOOT0_STACK_TOP_ = .;
+
     .text : AT(ORIGIN(boot0))
     {
-        _BOOT0_STACK_TOP_ = .;
         *boot0.o(.text .text.*)
     } > boot0
 
@@ -43,9 +45,11 @@ SECTIONS
         SHORT(0xaa55)   /* BIOS magic number. */
     } > boot0
 
+    . = ORIGIN(boot1);
+    _SECOND_STAGE_ADDR_ = .;
+
     .text : AT(ORIGIN(boot1)) 
     {
-        _SECOND_STAGE_ADDR_ = .;
         *(.text .text.*)
     } > boot1
 

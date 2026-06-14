@@ -109,6 +109,7 @@ _start0:
 
 .start_boot1:
     call _start;
+    jmp .panic_hang
 
 .keyboard_wait_command:
     inb $0x64, %al

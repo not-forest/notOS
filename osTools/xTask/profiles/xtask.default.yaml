@@ -1,0 +1,74 @@
+# Default xTask Post Script configuration YAML.
+#
+# Defines a set of default paramemeters for post-scripting configuration.
+#
+# **IMPORTANT**
+# 
+# For specific architecture, only those parameters, which are different from
+# the ones defined within this file, must be changed. Usually this implies
+# custom toolchain commands.
+#
+# Copyright (c) 2026 not-forest
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+# Build profile for kernel image generation..
+builder: &default_builder
+  # Output flat binary format. Supported values are "binary", "image" and "iso"
+  format: "image"
+  # Output binary name.
+  name: "notOS.img"
+  # which objcopy utility to use. Architecture specific.
+  objcopy: ~
+
+  # Defines a set of recipies to be build.
+  #
+  # Each recipe is a cargo crate package, which would be
+  # concatenated together into a single OS image. For each
+  # target, a set of flags can be defiled, but it is not mandatory.
+  recipes:
+    - package: "notOS-bootloader"
+      flags: ~
+    - package: "notOS"
+      flags: ~
+
+  # Extra scripts to execute after creating an image file.
+  #
+  # This must be provided as a list of strings, where each string
+  # represent a full command that shall be run. The command will be
+  # run within the target folder.
+  post_scripts: ~
+
+# Runner configuration.
+runner: &default_runner
+  # Engine used to run after post-compilation.
+  #
+  # This is not necessary shall be some simulation environment. Embedded systems
+  # can use this part to define custom flashing utilities.
+  engine: "qemu"
+
+  # A set of additional flags for the above selected engine.
+  flags:
+  - "-m"
+  - "1M"
+  - "-drive"
+  - "format=raw"
+  
+  # Debugger configuration.
+  debug:
+    # Debug engine command.
+    engine: "gdb"
+    port: 1234
+    # Additional flags provided to the debugger.
+    flags:
+    - "-ex"
+    - "layout asm"
+
+    # Debugging would not be started if disabled.
+    enabled: false

@@ -1,16 +1,2 @@
 [unstable]
 build-std = ["core", "compiler_builtins", "alloc"]
-
-# Helper build aliases.
-[alias]
-# Build kernel image for 32-bit x86 target architecture.
-build-x86 = "build -Zjson-target-spec --target=arch/x86/cfg/x86-unknown-none.json"
-clippy-x86 = "clippy -Zjson-target-spec --target=arch/x86/cfg/x86-unknown-none.json"
-
-# Build kernel image for 64-bit x86 target architecture.
-build-x86_64 = "build --target=x86_64-unknown-none"
-clippy-x86_64 = "clippy --target=x86_64-unknown-none"
-
-# Build bootloader image for x86/x86_64 architectures.
-build-bootloader-x86 = "build --package notOS-bootloader -Zjson-target-spec --target=arch/x86/cfg/i386-unknown-none-code16.json"
-clippy-bootloader-x86 = "clippy --package notOS-bootloader -Zjson-target-spec --target=arch/x86/cfg/i386-unknown-none-code16.json"

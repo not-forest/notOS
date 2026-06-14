@@ -1,0 +1,11 @@
+[project]
+name = "xTask"
+version = "0.1.0"
+description = "Kernel post-build general purpose script."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "rich",
+    "pyyaml",
+    "pyelftools"
+]
