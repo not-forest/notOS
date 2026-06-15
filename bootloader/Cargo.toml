@@ -8,10 +8,14 @@ repository.workspace = true
 [dependencies]
 #notOS = { path = ".." }
 build_const   = { version = "0.2.2", default-features = false }
+no-std-compat = "0.4.1"
 panic-custom = "0.1.1"
 
 [build-dependencies]
 buildConfig = { package = "notOS-build-config", path = "../buildConfig"}
+
+[features]
+std = [ "no-std-compat/std" ]
 
 [lints]
 workspace = true

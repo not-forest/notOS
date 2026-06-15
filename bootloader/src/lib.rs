@@ -5,6 +5,8 @@
 #![no_std]
 #![allow(non_snake_case)]
 
+extern crate no_std_compat as std;
+
 /// Compile-time hardware-specific generated constants from `bootloader.yaml` file.
 ///
 /// While kernel's constants are consistently reexported publicly, each architecture

@@ -33,34 +33,18 @@ _check_a20:
 
     # Prepare addresses.
     xor %ax, %ax
-    movw %ax, %es    # ES = 0
     notw %ax
     movw %ax, %ds    # DS = 0xffff
 
-    movw $_BIOS_MAGIC_ADDR_, %di
     movw $(_BIOS_MAGIC_ADDR_ + 0x10), %si
 
-    # Save original bytes from both potential mirror addresses onto stack
-    movb    %es:(%di), %al
-    push    %ax                 # Save original byte at 0x0000:[_BIOS_MAGIC_]
-    
-    movb    %ds:(%si), %al
-    push    %ax                 # Save original byte at 0xFFFF:[_BIOS_MAGIC_ + 0x10]
+    cmpw    $0xaa55, %ds:(%si)
+    je      .check_a20_disabled       # A20 is off, if we end up reading the same magic.
 
-    # Check whether 
-    cmpw    $0xAA55, %es:(%di)
-    jne     .check_a20_disabled       # If low memory isn't valid, treat as failing
-
-    # 2. Mirror Check: Compare high-memory wrap address directly against 0xAA55
-    cmpw    $0xAA55, %ds:(%si)
-    je      .check_a20_disabled       # If it matches 0xAA55, memory wrapped! (A20 is off)
-
-    # A20 is Enabled (No wrap detected) -> Return 1
     movw    $1, %ax
     jmp     .check_a20_exit
 
 .check_a20_disabled:
-    # A20 is Disabled (Addresses are mirroring) -> Return 0
     xorw    %ax, %ax
 
 .check_a20_exit:
