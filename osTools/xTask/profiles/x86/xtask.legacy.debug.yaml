@@ -43,7 +43,7 @@ runner:
   - "-m"
   - "1M"
   - "-drive"
-  - "format=raw"
+  - "format=raw,file=target/xTask/notOS.img"
   - "-s"
   - "-S"
   - "--no-reboot"
@@ -51,4 +51,9 @@ runner:
 
   debug:
     engine: "x86_64-elf-gdb"
+
+    flags:
+    - "-x"
+    - "config.gdb"
+
     enabled: true

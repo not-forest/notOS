@@ -64,11 +64,10 @@ runner: &default_runner
   debug:
     # Debug engine command.
     engine: "gdb"
-    port: 1234
     # Additional flags provided to the debugger.
     flags:
-    - "-ex"
-    - "layout asm"
+    - "-x"
+    - "config.gdb"
 
     # Debugging would not be started if disabled.
     enabled: false

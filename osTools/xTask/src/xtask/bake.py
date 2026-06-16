@@ -11,6 +11,8 @@ import subprocess
 from typing import Any
 from elftools.elf.elffile import ELFFile
 
+from .constants import XTASK_ERROR_MISSING_KEY
+
 logger = logging.getLogger('xTask')
 
 class ImageBaker:
@@ -43,7 +45,7 @@ class ImageBaker:
             self.format = config['builder']['format']
         except KeyError as e:
             logger.error(f'Mandatory field missing in YAML builder: {e}')
-            raise RuntimeError('Unable to create ImageBaker.')
+            raise XTASK_ERROR_MISSING_KEY
 
     def bake(self) -> int:
         ''' Bakes ELF files into OS image, based on the selected configuration format.
@@ -72,7 +74,7 @@ class ImageBaker:
         '''
         if self.objcopy == None:
             logger.error('Mandatory objcopy field not supplied in YAML profile.')
-            raise RuntimeError('FlatBin: No objcopy supplied.')
+            raise XTASK_ERROR_MISSING_KEY
 
         for elf in self.elfs:
             logger.info(f'Creating flat binary for: {os.path.basename(elf)}')

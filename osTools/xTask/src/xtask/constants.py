@@ -31,3 +31,5 @@ XTASK_COMMANDS = ['build', 'run', 'test']
 ''' xTask available commands. '''
 XTASK_BUILD_ALIAS = ['build', 'run', 'test']
 ''' xTask commands, which depend on build. '''
+
+XTASK_ERROR_MISSING_KEY = RuntimeError('Mandatory key missing from YAML.')

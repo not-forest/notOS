@@ -16,6 +16,7 @@ from .constants import (
     XTASK_COMMANDS,
     XTASK_BUILD_ALIAS,
     XTASK_DEFAULT_PROFILE_PATH,
+    XTASK_ERROR_MISSING_KEY,
     XTASK_LOGGING_LEVELS,
 )
 from .bake import ImageBaker
@@ -45,29 +46,33 @@ class xTask:
         elfs = []
         tmp_dir = os.path.join(OS_RELATIVE_ROOT_PATH, 'target', 'xTask')
 
-        for i, recipe in enumerate(self.config['builder']['recipes']):
-            flags = recipe['flags']
-            package = recipe['package']
+        try:
+            for i, recipe in enumerate(self.config['builder']['recipes']):
+                flags = recipe['flags']
+                package = recipe['package']
 
-            logger.info(f'Running recipe no: {i}\n'
-                f'Package: {package}\n'
-                f'Flags: {flags}' if flags else ''
-            )
+                logger.info(f'Running recipe no: {i}\n'
+                    f'Package: {package}\n'
+                    f'Flags: {flags}' if flags else ''
+                )
 
-            cmd = ['cargo', 'clippy', 
-                   '--package', package,
-                   '-Z', 'unstable-options']
-            if flags:
-                cmd.extend(flags)
-            # Firstly we just run clippy check.
-            subprocess.run(cmd, check=True)
+                cmd = ['cargo', 'clippy', 
+                       '--package', package,
+                       '-Z', 'unstable-options']
+                if flags:
+                    cmd.extend(flags)
+                # Firstly we just run clippy check.
+                subprocess.run(cmd, check=True)
 
-            # Then we run the build itself.
-            cmd[1] = 'build'
-            cmd.extend(['--artifact-dir', tmp_dir])
-            subprocess.run(cmd, check=True)
+                # Then we run the build itself.
+                cmd[1] = 'build'
+                cmd.extend(['--artifact-dir', tmp_dir])
+                subprocess.run(cmd, check=True)
 
-            elfs.append(os.path.join(tmp_dir, package))
+                elfs.append(os.path.join(tmp_dir, package))
+        except KeyError as e:
+            logger.error(f'Missing mandatory key: {e}')
+            raise XTASK_ERROR_MISSING_KEY
 
         baker = ImageBaker(elfs, self.config)
         bytes_baked = baker.bake()
@@ -79,8 +84,31 @@ class xTask:
     def run(self):
         ''' Run target based on the provided YAML configuration.
         '''
-        logger.error('Unimplemented')
-        raise RuntimeError
+        os.chdir(OS_RELATIVE_ROOT_PATH)
+
+        try:
+            runner = self.config['runner']
+            runner_engine = runner['engine']
+            runner_flags = runner['flags']
+            debug = runner['debug']
+            debug_engine = debug['engine']
+            debug_flags = debug['flags']
+        except KeyError as e:
+            logger.error(f'Missing mandatory key: {e}')
+            raise XTASK_ERROR_MISSING_KEY
+            
+        cmd = [runner_engine]
+        if runner_flags:
+            cmd.extend(runner_flags)
+
+        subprocess.Popen(cmd)
+
+        if debug['enabled']:
+            cmd = [debug_engine, ]
+            if debug_flags:
+                cmd.extend(debug_flags)
+                
+        subprocess.run(cmd, check=True)
 
     def test(self):
         ''' Executes target's tester based on provided YAML configuration
