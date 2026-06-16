@@ -11,15 +11,15 @@ import argparse
 import logging
 import subprocess
 
-from constants import (
+from .constants import (
     OS_RELATIVE_ROOT_PATH,
     XTASK_COMMANDS,
     XTASK_BUILD_ALIAS,
     XTASK_DEFAULT_PROFILE_PATH,
     XTASK_LOGGING_LEVELS,
 )
-from bake import ImageBaker
-from log import xTaskLogFormatter
+from .bake import ImageBaker
+from .log import xTaskLogFormatter
 
 logger = logging.getLogger('xTask')
 
@@ -110,7 +110,7 @@ def main():
         type=str,
         required=False,
         choices=XTASK_LOGGING_LEVELS,
-        help=f'Logging level for xTask. Supported values are {XTASK_LOGGING_LEVELS}'
+        help=f'Logging level for xTask. Supported values are {XTASK_LOGGING_LEVELS.keys()}'
     )
     args = parser.parse_args()
 

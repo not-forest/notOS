@@ -9,3 +9,6 @@ dependencies = [
     "pyyaml",
     "pyelftools"
 ]
+
+[project.scripts]
+xTask = "xtask.main:main"

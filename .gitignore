@@ -16,3 +16,8 @@ Cargo.lock
 
 # rustc will dump stack traces when hitting an internal compiler error to PWD
 rustc-ice-*.txt
+
+# UV generated python residue.
+**/*.pyc
+**/*.egg-info
+osTools/**/*build
