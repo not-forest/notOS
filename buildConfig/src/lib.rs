@@ -34,6 +34,15 @@ pub struct SysConfig {
     includes: Build,
 
     root_path: PathBuf,
+    config_prefix: bool,
+}
+
+// Custom enum that allows to parse special string cases.
+enum MaybeString<'a> {
+    String(&'a String),
+    Float(f64),
+    Int(i64),
+    Bool(bool),
 }
 
 impl SysConfig {
@@ -55,8 +64,21 @@ impl SysConfig {
             paths: Vec::new(),
             root_path: PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .parent().expect("Failed to locate workspace root.")
-                .to_path_buf()
+                .to_path_buf(),
+            config_prefix: true,
         }
+    }
+
+    /// Allows to adjust, whether to append a configuration prefix by default.
+    ///
+    /// **Parameters**
+    ///
+    /// * `p`: If true (default) - all constants and flags will be generated with
+    /// additional `CONFIG_` prefix appended. Otherwise the value will be forwarded
+    /// the way it is written within the YAML file.
+    pub fn with_config_prefix(mut self, p: bool) -> Self {
+        self.config_prefix = p;
+        self
     }
 
     /// Includes a `.yaml` file to parse via provided path.
@@ -255,15 +277,11 @@ impl SysConfig {
                 }
             },
             Value::String(s) => { 
-                if let Some(i) = Self::as_xbytes(s) {
-                    // KB, MB, GB special case.
-                    self.gen_key(&rust_const_name, i);
-                } else if rust_const_name.starts_with("CONFIG_LINKER") {
-                    // Link against linker script.
-                    Self::__include_linker_script(PathBuf::from(s));
-                } else {
-                    // Generate regular string literal. 
-                    self.gen_key(&rust_const_name, s.as_str())
+                match Self::maybe_string(s) {
+                    MaybeString::String(s) => self.gen_key(&rust_const_name, s),
+                    MaybeString::Int(i) => self.gen_key(&rust_const_name, i),
+                    MaybeString::Bool(b) => self.gen_key(&rust_const_name, b),
+                    MaybeString::Float(f) => self.gen_key(&rust_const_name, f),
                 }
             },
             Value::Mapping(nested) => { 
@@ -311,42 +329,50 @@ impl SysConfig {
     }
 
     // Generates sequences with recursive support.
-    fn gen_sequence(&mut self, name: &String, seq: &Vec<Value>) {
+    fn gen_sequence(&mut self, name: &String, seq: &[Value]) {
         let flattener = FlattenedValues::new(seq);
-        let first_primitive = FlattenedValues { stack: flattener.stack.clone() }.next();
+        let mut evaluated_items = Vec::new();
 
-        let Some(target_type) = first_primitive else { return; };
+        for val in flattener {
+            match val {
+                Value::Int(i) => evaluated_items.push(MaybeString::Int(*i)),
+                Value::Float(f) => evaluated_items.push(MaybeString::Float(*f)),
+                Value::Bool(b) => evaluated_items.push(MaybeString::Bool(*b)),
+                Value::String(s) => evaluated_items.push(Self::maybe_string(s)),
+                _ => {}
+            }
+        }
 
-        match target_type {
-            Value::Int(_) => {
-                let data: Vec<i64> = flattener.filter_map(|v| match v {
-                    Value::Int(i) => Some(*i),
+        let Some(first) = evaluated_items.first() else { return; };
+        match first {
+            MaybeString::Int(_) => {
+                let data: Vec<i64> = evaluated_items.iter().filter_map(|v| match v {
+                    MaybeString::Int(i) => Some(*i),
                     _ => None,
                 }).collect();
                 self.gen_array(name, data.as_slice());
-            },
-            Value::Bool(_) => {
-                let data: Vec<bool> = flattener.filter_map(|v| match v {
-                    Value::Bool(b) => Some(*b),
+            }
+            MaybeString::Bool(_) => {
+                let data: Vec<bool> = evaluated_items.iter().filter_map(|v| match v {
+                    MaybeString::Bool(b) => Some(*b),
                     _ => None,
                 }).collect();
                 self.gen_array(name, data.as_slice());
-            },
-            Value::Float(_) => {
-                let data: Vec<f64> = flattener.filter_map(|v| match v {
-                    Value::Float(f) => Some(*f),
+            }
+            MaybeString::Float(_) => {
+                let data: Vec<f64> = evaluated_items.iter().filter_map(|v| match v {
+                    MaybeString::Float(f) => Some(*f),
                     _ => None,
                 }).collect();
                 self.gen_array(name, data.as_slice());
-            },
-            Value::String(_) => {
-                let data: Vec<&str> = flattener.filter_map(|v| match v {
-                    Value::String(s) => Some(s.as_str()),
+            }
+            MaybeString::String(_) => {
+                let data: Vec<&str> = evaluated_items.iter().filter_map(|v| match v {
+                    MaybeString::String(s) => Some(s.as_str()),
                     _ => None,
                 }).collect();
                 self.gen_array(name, data.as_slice());
-            },
-            _ => panic!("Unsupported type definition for constant sequence."),
+            }
         }
     }
 
@@ -377,6 +403,35 @@ impl SysConfig {
             ),
             _ => panic!("Data types other than strings are not allowed for external source files list."),
         });
+    }
+
+    // Helper function to parse special string cases.
+    fn maybe_string<'a>(s: &'a String) -> MaybeString<'a> {
+        let normalized = s.trim().to_lowercase();
+        if let Some(i) = Self::as_xbytes(s) {
+            MaybeString::Int(i)
+        } else if let Some(stripped) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+            match i64::from_str_radix(stripped, 16) {
+                Ok(i) => MaybeString::Int(i),
+                Err(_) => MaybeString::String(s),
+            }
+        } else if let Some(stripped) = s.strip_prefix("0o").or_else(|| s.strip_prefix("0O")) {
+            match i64::from_str_radix(stripped, 8) {
+                Ok(i) => MaybeString::Int(i),
+                Err(_) => MaybeString::String(s),
+            }
+        } else if let Some(stripped) = s.strip_prefix("0b").or_else(|| s.strip_prefix("0B")) {
+            match i64::from_str_radix(stripped, 2) {
+                Ok(i) => MaybeString::Int(i),
+                Err(_) => MaybeString::String(s),
+            }
+        } else if matches!(normalized.as_str(), "true" | "yes" | "on") {
+            MaybeString::Bool(true)
+        } else if matches!(normalized.as_str(), "false" | "no" | "off") {
+            MaybeString::Bool(false)
+        } else {
+            MaybeString::String(s)
+        }
     }
 
     // KB, MB, GB parser helper.

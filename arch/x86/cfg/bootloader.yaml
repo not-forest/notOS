@@ -25,13 +25,13 @@ memory:
   #
   # Both stage0 and stage1 bootloaders use this stack to
   # initialize resources before giving control to kernel.
-  bootloader_stack_bottom: !!int 0x0500
-  bootloader_stack_top: !!int 0x7c00
+  bootloader_stack_bottom: 0x0500
+  bootloader_stack_top: 0x7c00
 
   # Memory range for bootloader.
-  bootloader_memory_start: !!int 0x7c00
-  bootloader_memory_end: !!int 0x9fbff
+  bootloader_memory_start: 0x7c00
+  bootloader_memory_end: 0x9fbff
 
   # Memory range for video memory.
-  video_memory_start: !!int 0xa0000
-  video_memory_end: !!int 0xbffff
+  video_memory_start: 0xa0000
+  video_memory_end: 0xbffff

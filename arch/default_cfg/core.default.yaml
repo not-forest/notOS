@@ -42,6 +42,6 @@ mandatory: &core_defaults
   cfg: &cfg_defaults
     # Defines if current target architecture supports MMU operations on virtual
     # memory. If your target does not support that, can be safely ignored.
-    has_virtual_memory: false
+    has_virtual_memory: no
     # Defines whether heap allocations API shall be appended to the kernel implementation.
-    has_heap: true
+    has_heap: yes
